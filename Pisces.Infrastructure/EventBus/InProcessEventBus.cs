@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Pisces.Core.Interfaces;
 
 namespace Pisces.Infrastructure.EventBus;

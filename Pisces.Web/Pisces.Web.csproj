@@ -7,4 +7,21 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Pisces.Core\Pisces.Core.csproj" />
+    <ProjectReference Include="..\Pisces.Infrastructure\Pisces.Infrastructure.csproj" />
+    <!-- Virtual hardware for development; registered only when Pisces:UseSimulator is true. -->
+    <ProjectReference Include="..\Pisces.Simulator\Pisces.Simulator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="data\module_map.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

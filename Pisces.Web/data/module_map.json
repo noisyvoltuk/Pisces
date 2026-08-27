@@ -1,0 +1,41 @@
+[
+  {
+    "Id": "vco_saw",
+    "Name": "Sawtooth VCO",
+    "Type": "Vco",
+    "UdoFile": "vco_saw.udo",
+    "Description": "Band-limited sawtooth oscillator",
+    "Parameters": {
+      "param1": { "Channel": "vco_saw_tune", "Label": "Tune", "Min": -24, "Max": 24, "Default": 0, "Unit": "st" },
+      "param2": { "Channel": "vco_saw_fine", "Label": "Fine", "Min": -100, "Max": 100, "Default": 0, "Unit": "c" },
+      "param3": { "Channel": "vco_saw_shape", "Label": "Shape", "Min": 0, "Max": 1, "Default": 0.5 },
+      "param4": { "Channel": "vco_saw_sub", "Label": "Sub", "Min": 0, "Max": 1, "Default": 0 }
+    }
+  },
+  {
+    "Id": "vcf_moog",
+    "Name": "Moog Ladder VCF",
+    "Type": "Vcf",
+    "UdoFile": "vcf_moog.udo",
+    "Description": "4-pole resonant low-pass ladder filter",
+    "Parameters": {
+      "param1": { "Channel": "vcf_cutoff", "Label": "Cutoff", "Min": 20, "Max": 18000, "Default": 1200, "Unit": "Hz", "Logarithmic": true },
+      "param2": { "Channel": "vcf_resonance", "Label": "Res", "Min": 0, "Max": 1, "Default": 0.2 },
+      "param3": { "Channel": "vcf_env_amt", "Label": "Env Amt", "Min": 0, "Max": 1, "Default": 0.3 },
+      "param4": { "Channel": "vcf_keytrack", "Label": "Key Trk", "Min": 0, "Max": 1, "Default": 0 }
+    }
+  },
+  {
+    "Id": "fx_reverb",
+    "Name": "Reverb + Delay FX",
+    "Type": "Fx",
+    "UdoFile": "fx_reverb.udo",
+    "Description": "Stereo reverb with a free-running delay line",
+    "Parameters": {
+      "param1": { "Channel": "fx_reverb_mix", "Label": "Rev Mix", "Min": 0, "Max": 1, "Default": 0.25 },
+      "param2": { "Channel": "fx_reverb_size", "Label": "Rev Size", "Min": 0, "Max": 1, "Default": 0.6 },
+      "param3": { "Channel": "fx_delay_time", "Label": "Dly Time", "Min": 10, "Max": 2000, "Default": 300, "Unit": "ms", "Logarithmic": true },
+      "param4": { "Channel": "fx_delay_mix", "Label": "Dly Mix", "Min": 0, "Max": 1, "Default": 0.15 }
+    }
+  }
+]

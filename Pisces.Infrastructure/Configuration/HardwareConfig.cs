@@ -40,8 +40,10 @@ public class EncoderConfig
 public class WaveSelectorConfig
 {
     public string Id { get; init; } = "wave";
+    // Left empty by default: the configuration binder appends to a pre-populated
+    // list rather than replacing it, which would duplicate the wave names.
     public List<int> GpioPins { get; init; } = [];
-    public List<string> WaveNames { get; init; } = ["sine", "sawtooth", "square", "triangle"];
+    public List<string> WaveNames { get; init; } = [];
 }
 
 public class ToggleConfig

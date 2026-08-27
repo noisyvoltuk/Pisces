@@ -21,9 +21,13 @@ public sealed class SimulatedControlInput : IControlInput
     public void SimulateEncoderTurn(string encoderId, int delta) =>
         EncoderChanged?.Invoke(this, new(encoderId, delta, DateTimeOffset.UtcNow));
 
-    /// <summary>Called from the Blazor virtual panel to simulate a button press.</summary>
+    /// <summary>Called from the Blazor virtual panel to simulate a momentary button press.</summary>
     public void SimulateButtonPress(string buttonId) =>
         ButtonPressed?.Invoke(this, new(buttonId, DateTimeOffset.UtcNow));
+
+    /// <summary>Called from the Blazor virtual panel to simulate an encoder push button press.</summary>
+    public void SimulateEncoderPress(string encoderId) =>
+        EncoderPressed?.Invoke(this, new(encoderId, DateTimeOffset.UtcNow));
 
     /// <summary>Called from the Blazor virtual panel to simulate a toggle change.</summary>
     public void SimulateToggle(string toggleId, bool isOn) =>

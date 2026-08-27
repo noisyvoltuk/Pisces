@@ -40,3 +40,21 @@ public record ToggleChangedEvent(
 /// Fired when patch switching starts and completes.
 /// </summary>
 public record PatchSwitchingEvent(bool IsSwitching, DateTimeOffset Timestamp);
+
+/// <summary>
+/// Fired when the rotary waveform selector switch changes position.
+/// Published by ControlDaemonService, consumed by CsoundEngine and DisplayDaemonService.
+/// </summary>
+public record WaveSelectedEvent(string WaveName, DateTimeOffset Timestamp);
+
+/// <summary>
+/// Fired when a momentary button is pressed (e.g. patch up / patch down).
+/// Published by ControlDaemonService, consumed by the patch service.
+/// </summary>
+public record ButtonPressedEvent(string ButtonId, string Action, DateTimeOffset Timestamp);
+
+/// <summary>
+/// Fired when the selector encoder push button is pressed.
+/// Published by ControlDaemonService, consumed by the module selection service.
+/// </summary>
+public record SelectorPressedEvent(DateTimeOffset Timestamp);

@@ -1,0 +1,223 @@
+@page "/simulator"
+@rendermode InteractiveServer
+@implements IDisposable
+
+@using Pisces.Core.Interfaces
+@using Pisces.Core.Models
+@using Pisces.Infrastructure.Configuration
+@using Pisces.Simulator
+@using Microsoft.Extensions.Options
+
+@inject IServiceProvider Sp
+@inject IOptions<HardwareConfig> HwOptions
+@inject ISynthStateService State
+@inject IModuleMap ModuleMap
+
+<PageTitle>Simulator</PageTitle>
+
+<h1>Virtual panel</h1>
+
+@if (_offline)
+{
+    <div class="alert alert-warning">
+        Simulator mode is off. Set <code>"Pisces:UseSimulator": true</code> in
+        <code>appsettings.Development.json</code> and restart.
+    </div>
+}
+else
+{
+    <p class="text-muted">
+        Drives <code>SimulatedControlInput</code>. The control daemon resolves each turn through the
+        active module's parameter map and publishes onto the event bus; the simulated CSound engine
+        logs every channel write below.
+    </p>
+
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Module selector</span>
+                    <span class="badge bg-primary">@State.Current.SelectedModuleRole</span>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        Active: <strong>@(ActiveModule?.Name ?? "—")</strong>
+                        @if (ActiveModule is not null) { <span class="text-muted">(@ActiveModule.Description)</span> }
+                    </p>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => Turn(Hw.SelectorEncoder.Id, -1)">◀ prev role</button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => Turn(Hw.SelectorEncoder.Id, 1)">next role ▶</button>
+                    <button class="btn btn-outline-dark btn-sm" @onclick="() => PressEncoder(Hw.SelectorEncoder.Id)">push</button>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Parameter encoders</div>
+                <div class="card-body">
+                    @foreach (var enc in Hw.ParameterEncoders)
+                    {
+                        var slot = SlotFor(enc.Slot);
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span><strong>@enc.Id</strong> · @enc.Slot
+                                    @if (slot is not null) { <span>→ @slot.Label <span class="text-muted">(@slot.Channel)</span></span> }
+                                </span>
+                                <span>@(slot is not null ? slot.FormatValue(ValueFor(slot.Channel)) : "unmapped")</span>
+                            </div>
+                            <div class="progress my-1" style="height: 6px;">
+                                <div class="progress-bar" role="progressbar"
+                                     style="width: @(((slot is not null ? slot.NormaliseValue(ValueFor(slot.Channel)) : 0) * 100).ToString("0.#"))%"></div>
+                            </div>
+                            <button class="btn btn-outline-secondary btn-sm" disabled="@(slot is null)" @onclick="() => Turn(enc.Id, -1)">−</button>
+                            <button class="btn btn-outline-secondary btn-sm" disabled="@(slot is null)" @onclick="() => Turn(enc.Id, 1)">+</button>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Waveform selector</div>
+                <div class="card-body">
+                    @{ var waves = Hw.WaveSelector.WaveNames; }
+                    @for (var i = 0; i < waves.Count; i++)
+                    {
+                        var idx = i;
+                        <button class="btn btn-sm @(idx == _waveIndex ? "btn-primary" : "btn-outline-primary") me-1"
+                                @onclick="() => SetWave(idx)">@waves[idx]</button>
+                    }
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Toggles</div>
+                <div class="card-body">
+                    @foreach (var tog in Hw.Toggles)
+                    {
+                        var t = tog;
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="@t.Id"
+                                   checked="@State.Current.ToggleStates.GetValueOrDefault(t.Id)"
+                                   @onchange="e => SetToggle(t, (bool)e.Value!)" />
+                            <label class="form-check-label" for="@t.Id">
+                                @t.Label <span class="text-muted">(@t.Channel)</span>
+                            </label>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Buttons</div>
+                <div class="card-body">
+                    @foreach (var btn in Hw.Buttons)
+                    {
+                        var b = btn;
+                        <button class="btn btn-outline-dark btn-sm me-1" @onclick="() => Press(b.Id)">@b.Id (@b.Action)</button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card mb-3">
+                <div class="card-header">Synth state</div>
+                <div class="card-body">
+                    <p class="mb-1">Selected role: <strong>@State.Current.SelectedModuleRole</strong></p>
+                    <p class="mb-1">Active channel: <strong>@(State.Current.ActiveChannel ?? "—")</strong></p>
+                    <p class="mb-2">Modules: @string.Join(", ", State.Current.ActiveModules.Select(m => $"{m.Key}={m.Value}"))</p>
+                    <table class="table table-sm">
+                        <thead><tr><th>Channel</th><th class="text-end">Value</th></tr></thead>
+                        <tbody>
+                        @foreach (var kv in State.Current.ParameterValues.OrderBy(k => k.Key))
+                        {
+                            <tr><td><code>@kv.Key</code></td><td class="text-end">@kv.Value.ToString("0.###")</td></tr>
+                        }
+                        @foreach (var kv in State.Current.ToggleStates.OrderBy(k => k.Key))
+                        {
+                            <tr><td><code>@kv.Key</code></td><td class="text-end">@(kv.Value ? "on" : "off")</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">CSound engine log</div>
+                <div class="card-body p-0">
+                    <pre class="mb-0 p-2" style="max-height: 320px; overflow-y: auto; font-size: 0.8rem;">@string.Join("\n", _log)</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _offline;
+    private int _waveIndex;
+    private HardwareConfig? _hw;
+    private SimulatedControlInput? _input;
+    private SimulatedCsoundEngine? _csound;
+    private IReadOnlyList<string> _log = Array.Empty<string>();
+    private Dictionary<string, Module> _modules = new();
+
+    private HardwareConfig Hw => _hw!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _input = Sp.GetService<SimulatedControlInput>();
+        _csound = Sp.GetService<SimulatedCsoundEngine>();
+        if (_input is null || _csound is null)
+        {
+            _offline = true;
+            return;
+        }
+
+        _hw = HwOptions.Value;
+        _modules = (await ModuleMap.GetAllModulesAsync()).ToDictionary(m => m.Id);
+        _log = _csound.RecentLog();
+
+        State.StateChanged += OnStateChanged;
+        _csound.LogReceived += OnLog;
+    }
+
+    private void OnStateChanged(object? sender, SynthState state) => InvokeAsync(StateHasChanged);
+
+    private void OnLog(object? sender, string line)
+    {
+        _log = _csound!.RecentLog();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private Module? ActiveModule
+    {
+        get
+        {
+            var id = State.Current.ActiveModules.GetValueOrDefault(State.Current.SelectedModuleRole, string.Empty);
+            return _modules.GetValueOrDefault(id);
+        }
+    }
+
+    private ParameterSlot? SlotFor(string slot) => ActiveModule?.Parameters.GetValueOrDefault(slot);
+
+    private double ValueFor(string channel) => State.Current.ParameterValues.GetValueOrDefault(channel);
+
+    private void Turn(string id, int delta) => _input!.SimulateEncoderTurn(id, delta);
+
+    private void PressEncoder(string id) => _input!.SimulateEncoderPress(id);
+
+    private void SetWave(int i)
+    {
+        _waveIndex = i;
+        _input!.SimulateSelector(Hw.WaveSelector.Id, i);
+    }
+
+    private void SetToggle(ToggleConfig toggle, bool isOn) => _input!.SimulateToggle(toggle.Id, isOn);
+
+    private void Press(string id) => _input!.SimulateButtonPress(id);
+
+    public void Dispose()
+    {
+        State.StateChanged -= OnStateChanged;
+        if (_csound is not null)
+            _csound.LogReceived -= OnLog;
+    }
+}
