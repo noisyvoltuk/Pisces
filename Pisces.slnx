@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../../../Downloads/PiSynth_solution/PiSynth/README.md" />
+    <File Path="CLAUDE.md" />
+  </Folder>
+  <Project Path="CSound.Infrastructure/Pisces.Infrastructure.csproj" Id="1cf9aae7-ae7a-45bc-965a-b35ebb98d173" />
+  <Project Path="CSound.Simulator/Pisces.Simulator.csproj" Id="96f0c069-fe16-4f7f-9850-e3d8d652f829" />
+  <Project Path="Pisces.Core/Pisces.Core.csproj" Id="9abb6c97-654f-4d4c-9e04-bff93aea15c0" />
+  <Project Path="Pisces.CSound/Pisces.CSound.csproj" Id="f6985dcb-34f6-471e-996f-9c5bf008fae7" />
+  <Project Path="Pisces.Hardware/Pisces.Hardware.csproj" Id="a6168793-d4ae-4d40-86bd-b72104fa36eb" />
+  <Project Path="Pisces.Web/Pisces.Web.csproj" Id="8eb3ded0-cd4b-442d-ab18-ad881b120fe4" />
+</Solution>
