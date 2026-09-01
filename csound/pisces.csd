@@ -170,10 +170,16 @@ instr 21
   ; TODO: vcf_lfo_retrig — reset phase on note-on when set
 endin
 
-; ======================================================= instr 2: MIDI voice =
+; ======================================================= instr 2: voice ======
+; MIDI-triggered, or from the score for a no-MIDI test:  i 2 <start> <dur> <midinote> <vel 0-127>
 instr 2
-  inote  notnum
-  ivel   veloc 0, 1
+  if p4 == 0 then
+    inote  notnum                ; MIDI note
+    ivel   veloc 0, 1
+  else
+    inote  = p4                  ; score test note
+    ivel   = p5 / 127
+  endif
 
   ; ---- pitch: tune + fine + pitch-LFO ----
   ktune  chnget "vco_saw_tune"
@@ -181,13 +187,14 @@ instr 2
   kpmod  chnget "mod_vco_pitch"                 ; semitones
   kcps   = cpsmidinn(inote + ktune + kfine/100 + kpmod)
 
-  ; ---- oscillators: saw + (shape)*square + (sub)*square@-1oct ----
+  ; ---- oscillators (all sawtooth; imode 0 is the portable form) ----
+  ;   shape -> a saw an octave up for brightness;  sub -> a saw an octave down
   kshape chnget "vco_saw_shape"
   ksub   chnget "vco_saw_sub"
-  asaw   vco2 0.5,           kcps,      0
-  asqr   vco2 0.5 * kshape,  kcps,      2
-  asb    vco2 0.5 * ksub,    kcps * 0.5, 2
-  avco   = asaw + asqr + asb
+  asaw   vco2 0.5,           kcps,       0
+  ahi    vco2 0.4 * kshape,  kcps * 2,   0
+  asb    vco2 0.5 * ksub,    kcps * 0.5, 0
+  avco   = asaw + ahi + asb
 
   ; ---- filter envelope (channel times are in ms) ----
   iatt   chnget "flt_att"
