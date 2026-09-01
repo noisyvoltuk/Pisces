@@ -1,0 +1,28 @@
+# Pisces CSound engine — runs independently of the .NET app, which talks to it
+# only over OSC. Install as a SYSTEM unit (not --user): CsoundOscClient tails the
+# log with `journalctl -u pisces-csound`, which only sees system units.
+#
+#   sudo cp pisces-csound.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pisces-csound
+#   journalctl -u pisces-csound -f
+
+[Unit]
+Description=Pisces CSound engine
+After=sound.target
+
+[Service]
+# Adjust the path, audio device and user for your machine.
+#   Pi + HiFiBerry:  -odac:hw:0,0
+#   desktop:         -odac
+ExecStart=/usr/bin/csound /home/pi/pisces/csound/pisces.csd -odac -Ma -d -m0
+Restart=always
+RestartSec=2
+User=pi
+
+# Real-time audio niceties (optional; needs limits.conf / rtkit set up)
+#LimitRTPRIO=95
+#LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
