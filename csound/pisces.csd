@@ -203,11 +203,11 @@ instr 2
   avcf   = afilt * kwet + avco * (1 - kwet)
 
   ; ---- amp envelope + VCA ----
-  jatt   chnget "amp_att"
-  jdec   chnget "amp_dec"
-  jslv   chnget "amp_sus"
-  jrel   chnget "amp_rel"
-  kaenv  madsr jatt/1000, jdec/1000, jslv, jrel/1000
+  iaatt  chnget "amp_att"
+  iadec  chnget "amp_dec"
+  iasus  chnget "amp_sus"
+  iarel  chnget "amp_rel"
+  kaenv  madsr iaatt/1000, iadec/1000, iasus, iarel/1000
 
   aout   = avcf * kaenv * ivel * 0.3
 
