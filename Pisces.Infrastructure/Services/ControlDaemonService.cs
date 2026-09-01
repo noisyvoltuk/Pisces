@@ -57,7 +57,6 @@ public sealed class ControlDaemonService : BackgroundService
         _input.EncoderPressed += OnEncoderPressed;
         _input.ToggleChanged += OnToggleChanged;
         _input.ButtonPressed += OnButtonPressed;
-        _input.SelectorChanged += OnSelectorChanged;
 
         await _input.InitialiseAsync(stoppingToken);
         _logger.LogInformation("Control daemon running with roles [{Roles}]", string.Join(", ", _roles));
@@ -76,26 +75,28 @@ public sealed class ControlDaemonService : BackgroundService
             _input.EncoderPressed -= OnEncoderPressed;
             _input.ToggleChanged -= OnToggleChanged;
             _input.ButtonPressed -= OnButtonPressed;
-            _input.SelectorChanged -= OnSelectorChanged;
         }
     }
 
     private async Task SeedStateAsync(CancellationToken ct)
     {
-        _modules = (await _moduleMap.GetAllModulesAsync(ct)).ToDictionary(m => m.Id);
+        var modules = await _moduleMap.GetAllModulesAsync(ct);
+        _modules = modules.ToDictionary(m => m.Id);
         if (_modules.Count == 0)
         {
             _logger.LogWarning("No modules in the module map — controls will have nothing to drive");
             return;
         }
 
-        // One active module per role; role name is the lower-cased module type.
-        foreach (var group in _modules.Values.GroupBy(m => m.Type))
+        // First module wins per role; roles are cycled in module-map file order.
+        foreach (var module in modules)
         {
-            var module = group.First();
-            var role = RoleFor(module.Type);
-            await _state.SetActiveModuleAsync(role, module.Id, ct);
+            var role = RoleOf(module);
+            if (_roles.Contains(role))
+                continue;
+
             _roles.Add(role);
+            await _state.SetActiveModuleAsync(role, module.Id, ct);
 
             foreach (var (slot, ps) in module.Parameters)
             {
@@ -104,13 +105,14 @@ public sealed class ControlDaemonService : BackgroundService
             }
         }
 
-        _roles = _roles.Distinct().OrderBy(r => r).ToList();
-
         if (!_roles.Contains(_state.Current.SelectedModuleRole))
             await _state.SetSelectedModuleRoleAsync(_roles[0], ct);
     }
 
-    private static string RoleFor(ModuleType type) => type.ToString().ToLowerInvariant();
+    private static string RoleOf(Module module) =>
+        string.IsNullOrWhiteSpace(module.Role)
+            ? module.Type.ToString().ToLowerInvariant()
+            : module.Role;
 
     private static string Key(string role, string slot) => $"{role}:{slot}";
 
@@ -216,26 +218,6 @@ public sealed class ControlDaemonService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Button event handling failed for {Button}", e.ButtonId);
-        }
-    }
-
-    private async void OnSelectorChanged(object? sender, SelectorChangedArgs e)
-    {
-        try
-        {
-            if (!string.Equals(e.SelectorId, _hw.WaveSelector.Id, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            var names = _hw.WaveSelector.WaveNames;
-            if (names.Count == 0)
-                return;
-
-            var index = Math.Clamp(e.Position, 0, names.Count - 1);
-            await _bus.PublishAsync(new WaveSelectedEvent(names[index], e.Timestamp));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Selector event handling failed for {Selector}", e.SelectorId);
         }
     }
 }

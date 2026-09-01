@@ -3,7 +3,7 @@
 ## What is Pisces?
 
 Pisces is a modular CSound synthesizer running on a Raspberry Pi 4, controlled via physical hardware
-controls (rotary encoders, toggle switches, a rotary selector) and a Blazor Server web interface.
+controls (rotary encoders and toggle switches) and a Blazor Server web interface.
 It is designed to be open and extensible — new CSound modules (VCOs, VCFs, effects) can be added
 without touching core code.
 
@@ -14,8 +14,7 @@ without touching core code.
 - **5 × SSD1306 OLED displays** (128x64) via I2C + TCA9548A multiplexer
 - **1 × ST7789 or ILI9341 colour TFT** (320x240) via SPI — module selector display
 - **5 × rotary encoders with push button** — 1 selector + 4 parameter encoders
-- **1 × rotary selector switch** — waveform selection
-- **2 × toggle switches** — on/off parameters (filter bypass, OSC sync)
+- **2 × toggle switches** — on/off parameters (filter bypass; second switch currently spare)
 - **2 × momentary buttons** — patch up/down
 - **USB MIDI** — note input direct to CSound via -Ma flag
 
@@ -69,9 +68,10 @@ All defined in `SynthEvents.cs`. Use these — do not add direct service calls.
 | `PatchLoadedEvent` | Patch service | All |
 | `ToggleChangedEvent` | `ControlDaemonService` | `CsoundEngine`, `DisplayDaemonService` |
 | `ButtonPressedEvent` | `ControlDaemonService` | Patch service |
-| `WaveSelectedEvent` | `ControlDaemonService` | `CsoundEngine`, `DisplayDaemonService` |
 | `PatchSwitchingEvent` | Patch service | `DisplayDaemonService`, SignalR hub |
 | `SelectorPressedEvent` | `ControlDaemonService` | Module selection service |
+| `CsoundStatusEvent` | `CsoundMonitorService` | SignalR hub |
+| `CsoundLogEvent` | `CsoundOscClient` (journalctl tail) | SignalR hub |
 
 ## Three-Layer Control Mapping
 
@@ -82,24 +82,75 @@ Physical control → abstract slot → CSound channel
 
 2. **Layer 2 — Slot to channel** (per module, in `data/module_map.json`)
    `param1` means `vcf_cutoff` when VCF is selected, `vco_fm_ratio` when FM VCO is selected.
+   Each module declares a `Role` (`vco`, `vcf`, `flt_env`, `amp_env`, `fx`, …); one module
+   is active per role and the selector encoder cycles roles in file order.
 
 3. **Layer 3 — Value scaling** (in `ParameterSlot.Min/Max/Logarithmic`)
    Normalised encoder value (0.0–1.0) scaled to CSound units.
 
+The ADSRs are modules like any other (`Type: Adsr`, roles `flt_env` / `amp_env`) even though
+they have no `.udo` — they are built into the master orchestra and just expose `flt_*` / `amp_*`
+channels. From the panel's point of view they look and behave exactly like a UDO module.
+
 ## CSound Architecture
 
 CSound runs as a **separate systemd service** (`pisces-csound.service`), independent of the .NET app.
-The .NET app communicates with it via **OSC** (`OscClient`) — never by owning the process.
+The .NET app communicates with it via **OSC** — never by owning, starting, or restarting the process.
+On Windows there is no CSound at all; `SimulatedCsoundEngine` stands in.
 
-Each CSound module is a **UDO** (User Defined Opcode) in `csound/udos/`.
+One **master orchestra** (`.csd` + the UDOs) is always loaded. Module selection happens *inside*
+that orchestra via OSC channels — the orchestra is never swapped or reloaded at runtime.
+
+### OSC convention
+
+Transport: UDP, OSC 1.0, loopback on the Pi. Config is the `Csound` section → `CsoundConfig`
+(`Pisces.CSound`): `OscHost` (default `127.0.0.1`), `OscSendPort` (csound listens, default `7770`),
+`OscListenPort` (.NET listens, default `7771`), `PingIntervalSeconds`, `MissedPongLimit`, `LogUnit`.
+
+**.NET → csound**
+
+| Address | Types | Args | Meaning |
+|---|---|---|---|
+| `/pisces/param` | `sf` | name, value | set control channel `name` to `value` in **real/scaled units** (`chnset kval, Sname`) |
+| `/pisces/toggle` | `si` | name, 0\|1 | discrete on/off channel |
+| `/pisces/module` | `ss` | role, moduleId | select active module for a role; orchestra dispatches to the matching UDO |
+| `/pisces/patch/begin` | `s` | patchId | start of a bulk patch load |
+| `/pisces/patch/end` | `s` | patchId | end of bulk load — orchestra may crossfade / recompute |
+| `/pisces/ping` | `ii` | nonce, replyPort | liveness probe |
+
+Multiple channel writes go out as a single OSC **bundle** (`ICsoundEngine.SetChannelsAsync`).
+Channel names come from `ParameterSlot.Channel` (resolved via `IModuleMap`) — a single `OSClisten`
+on `/pisces/param` covers every current and future parameter.
+
+**csound → .NET**
+
+| Address | Types | Args | Meaning |
+|---|---|---|---|
+| `/pisces/pong` | `i` | nonce | reply to `/pisces/ping`, sent to `replyPort` |
+| `/pisces/meter` | `ff` | L, R | optional — output levels for a UI meter |
+
+**Liveness:** `CsoundOscClient` pings every `PingIntervalSeconds`; after `MissedPongLimit`
+consecutive misses `IsRunning` goes false and `ProcessExited` fires; the next pong flips it back.
+`CsoundMonitorService` (`Pisces.Infrastructure.Services`) turns that into `CsoundStatusEvent` on the
+bus. Log lines are tailed separately from `journalctl -u {LogUnit}` (Linux only) into
+`CsoundLogEvent` / `ICsoundEngine.LogReceived`.
+
+Most CSound modules are a **UDO** (User Defined Opcode) in `csound/udos/`; the ADSRs are the
+exception (built into the master orchestra — see the control-mapping section).
+Two things that are *not* dedicated controls, because they don't generalise across modules:
+- **Waveform** — a VCO with a selectable waveform exposes it as a `param` slot
+  (e.g. `vco_analogue_wave`), scaled to a small integer range.
+- **Oscillator sync** — a sync-capable VCO exposes it as a `param` slot (0 = off), not a toggle.
 Standard UDO channel naming convention:
 - VCO channels: `vco_{modulevariant}_{param}` e.g. `vco_fm_ratio`, `vco_fm_index`
 - VCF channels: `vcf_{param}` e.g. `vcf_cutoff`, `vcf_resonance`
 - Filter ADSR: `flt_att`, `flt_dec`, `flt_sus`, `flt_rel`, `flt_env_amt`
 - Amp ADSR: `amp_att`, `amp_dec`, `amp_sus`, `amp_rel`
-- LFO: `lfo_rate`, `lfo_depth`, `lfo_shape`
+- LFO: `{role}_rate`, `{role}_depth`, `{role}_shape` for roles `vco_lfo` / `vcf_lfo`.
+  The LFO UDO writes its output to a mod-sum channel (`mod_vco_pitch`, `mod_vcf_cutoff`) which the
+  VCO / VCF sections add in — additively with the ADSRs on the same destination.
 - FX: `fx_reverb_mix`, `fx_reverb_size`, `fx_delay_time`, `fx_delay_mix`
-- Toggles: `vcf_bypass`, `vco_sync`
+- Toggles: `vcf_bypass`
 
 Signal flow: `VCO → VCF → VCA → FX → OUT`
 Both VCF and VCA have independent ADSRs.
@@ -110,8 +161,8 @@ MIDI drives notes directly — no Python or .NET in the audio path.
 ```
 [TFT — module selector]          ← SPI, top of panel, colour display
 [OLED 0]  [OLED 1]  [OLED 2]  [OLED 3]   ← I2C via TCA9548A
-param1+2  param3+4  waveform   toggles
-[enc1][enc2]  [enc3][enc4]  [wave sw]  [tog1][tog2]
+param1+2  param3+4  (spare)    toggles
+[enc1][enc2]  [enc3][enc4]              [tog1]
 ```
 
 Each OLED shows 2 rows — one per encoder or control it sits above.
@@ -124,8 +175,8 @@ TFT shows all module roles, currently selected role highlighted, key parameter s
 |---|---|---|---|
 | OLED | 0 | `params_1_2` | param1 label+value, param2 label+value |
 | OLED | 1 | `params_3_4` | param3 label+value, param4 label+value |
-| OLED | 2 | `wave_selector` | current waveform, available options |
-| OLED | 3 | `toggles` | toggle 1 label+state, toggle 2 label+state |
+| OLED | 2 | `spare` | unassigned — freed when the waveform selector switch was removed |
+| OLED | 3 | `toggles` | toggle 1 label+state (toggle 2 spare) |
 | TFT | — | `module_selector` | all module roles, selected role, param summary |
 
 ## Development on Windows

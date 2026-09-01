@@ -42,12 +42,6 @@ public record ToggleChangedEvent(
 public record PatchSwitchingEvent(bool IsSwitching, DateTimeOffset Timestamp);
 
 /// <summary>
-/// Fired when the rotary waveform selector switch changes position.
-/// Published by ControlDaemonService, consumed by CsoundEngine and DisplayDaemonService.
-/// </summary>
-public record WaveSelectedEvent(string WaveName, DateTimeOffset Timestamp);
-
-/// <summary>
 /// Fired when a momentary button is pressed (e.g. patch up / patch down).
 /// Published by ControlDaemonService, consumed by the patch service.
 /// </summary>
@@ -58,3 +52,15 @@ public record ButtonPressedEvent(string ButtonId, string Action, DateTimeOffset 
 /// Published by ControlDaemonService, consumed by the module selection service.
 /// </summary>
 public record SelectorPressedEvent(DateTimeOffset Timestamp);
+
+/// <summary>
+/// Fired when the reachability of the CSound OSC daemon changes.
+/// Published by CsoundMonitorService, consumed by the SignalR hub / web UI.
+/// </summary>
+public record CsoundStatusEvent(bool Online, DateTimeOffset Timestamp);
+
+/// <summary>
+/// A single log line tailed from the CSound service (journalctl).
+/// Published by CsoundOscClient, consumed by the SignalR hub / web UI.
+/// </summary>
+public record CsoundLogEvent(string Line, DateTimeOffset Timestamp);

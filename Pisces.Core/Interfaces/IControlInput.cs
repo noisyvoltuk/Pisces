@@ -28,15 +28,8 @@ public interface IControlInput : IAsyncDisposable
     /// Fired when a momentary button is pressed.
     /// </summary>
     event EventHandler<ButtonArgs> ButtonPressed;
-
-    /// <summary>
-    /// Fired when the rotary selector changes position.
-    /// Position is zero-indexed.
-    /// </summary>
-    event EventHandler<SelectorChangedArgs> SelectorChanged;
 }
 
 public record EncoderChangedArgs(string EncoderId, int Delta, DateTimeOffset Timestamp);
 public record ButtonArgs(string ButtonId, DateTimeOffset Timestamp);
 public record ToggleChangedArgs(string ToggleId, bool IsOn, DateTimeOffset Timestamp);
-public record SelectorChangedArgs(string SelectorId, int Position, DateTimeOffset Timestamp);

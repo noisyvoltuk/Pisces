@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Pisces.Core\Pisces.Core.csproj" />
     <ProjectReference Include="..\Pisces.Infrastructure\Pisces.Infrastructure.csproj" />
+    <ProjectReference Include="..\Pisces.CSound\Pisces.CSound.csproj" />
     <!-- Virtual hardware for development; registered only when Pisces:UseSimulator is true. -->
     <ProjectReference Include="..\Pisces.Simulator\Pisces.Simulator.csproj" />
   </ItemGroup>

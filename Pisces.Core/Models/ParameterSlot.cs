@@ -10,37 +10,37 @@ public class ParameterSlot
     /// The CSound channel name this slot writes to (e.g. "vcf_cutoff").
     /// Must match the channel name used in the .udo file.
     /// </summary>
-    public string Channel { get; init; } = string.Empty;
+    public string Channel { get; set; } = string.Empty;
 
     /// <summary>
     /// Human-readable label shown on the OLED display.
     /// </summary>
-    public string Label { get; init; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
 
     /// <summary>
     /// Minimum value in CSound units (e.g. 20 for Hz, 0.0 for normalised).
     /// </summary>
-    public double Min { get; init; } = 0.0;
+    public double Min { get; set; } = 0.0;
 
     /// <summary>
     /// Maximum value in CSound units (e.g. 18000 for Hz, 1.0 for normalised).
     /// </summary>
-    public double Max { get; init; } = 1.0;
+    public double Max { get; set; } = 1.0;
 
     /// <summary>
     /// Default value in CSound units.
     /// </summary>
-    public double Default { get; init; } = 0.5;
+    public double Default { get; set; } = 0.5;
 
     /// <summary>
     /// Optional unit suffix for display (e.g. "Hz", "ms", "%").
     /// </summary>
-    public string Unit { get; init; } = string.Empty;
+    public string Unit { get; set; } = string.Empty;
 
     /// <summary>
     /// Whether value scaling should be logarithmic (useful for frequency, time).
     /// </summary>
-    public bool Logarithmic { get; init; } = false;
+    public bool Logarithmic { get; set; } = false;
 
     /// <summary>
     /// Scale a normalised encoder value (0.0–1.0) to CSound units.

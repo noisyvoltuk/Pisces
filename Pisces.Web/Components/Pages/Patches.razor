@@ -1,0 +1,228 @@
+@page "/patches"
+@rendermode InteractiveServer
+@implements IDisposable
+
+@using System.Globalization
+@using Microsoft.Extensions.Options
+@using Pisces.Infrastructure.Configuration
+@using Pisces.Infrastructure.Services
+@inject IPatchRepository Repo
+@inject PatchService PatchSvc
+@inject ISynthStateService State
+@inject IModuleMap ModuleMap
+@inject IOptions<HardwareConfig> HwOptions
+
+<PageTitle>Patches</PageTitle>
+
+<h1>Patch workbench</h1>
+<p class="text-muted">
+    Pick a module per role and dial in values — everything applies to the live synth as you go.
+    Save when it sounds right.
+</p>
+
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Workbench</span>
+        <span class="text-muted small">
+            editing:
+            <strong>@(string.IsNullOrEmpty(State.Current.ActivePatchId) ? "(unsaved)" : State.Current.ActivePatchName)</strong>
+            @(State.Current.IsSwitching ? " · switching…" : "")
+        </span>
+    </div>
+    <div class="card-body">
+        @foreach (var role in _roles)
+        {
+            var options = _modulesByRole.GetValueOrDefault(role) ?? new();
+            var activeId = State.Current.ActiveModules.GetValueOrDefault(role, "");
+            var module = options.FirstOrDefault(m => m.Id == activeId);
+            <div class="mb-3 pb-2 border-bottom">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-secondary">@role</span>
+                    <select class="form-select form-select-sm" style="max-width: 22rem"
+                            @onchange="e => ChangeModule(role, e.Value?.ToString())">
+                        @foreach (var m in options)
+                        {
+                            <option value="@m.Id" selected="@(m.Id == activeId)">@m.Name</option>
+                        }
+                    </select>
+                </div>
+                @if (module is not null)
+                {
+                    <div class="row g-2">
+                        @foreach (var (_, slot) in module.Parameters.OrderBy(p => p.Key))
+                        {
+                            var s = slot;
+                            var val = State.Current.ParameterValues.GetValueOrDefault(s.Channel);
+                            <div class="col-md-6 d-flex align-items-center gap-2">
+                                <label class="small text-nowrap text-truncate" style="width: 6rem" title="@s.Channel">@s.Label</label>
+                                <input type="range" class="form-range" min="0" max="1" step="0.001"
+                                       value="@s.NormaliseValue(val).ToString("0.###", CultureInfo.InvariantCulture)"
+                                       @oninput="e => SetParam(s, e.Value?.ToString())" />
+                                <span class="small text-nowrap text-end" style="width: 4.5rem">@s.FormatValue(val)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_hw.Toggles.Count > 0)
+        {
+            <div class="mt-1">
+                @foreach (var tog in _hw.Toggles)
+                {
+                    var t = tog;
+                    <div class="form-check form-switch d-inline-block me-3">
+                        <input class="form-check-input" type="checkbox" id="wb-@t.Id"
+                               checked="@State.Current.ToggleStates.GetValueOrDefault(t.Id)"
+                               @onchange="e => SetToggle(t.Id, (bool)e.Value!)" />
+                        <label class="form-check-label small" for="wb-@t.Id">@t.Label</label>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">Save</div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-4">
+                <label class="form-label mb-0 small">Name</label>
+                <input class="form-control form-control-sm" @bind="_name" @bind:event="oninput" />
+            </div>
+            <div class="col-sm-5">
+                <label class="form-label mb-0 small">Description</label>
+                <input class="form-control form-control-sm" @bind="_description" @bind:event="oninput" />
+            </div>
+            <div class="col-sm-3 d-flex gap-1">
+                <button class="btn btn-primary btn-sm" disabled="@string.IsNullOrWhiteSpace(_name)" @onclick="SaveNew">Save as new</button>
+                @if (!string.IsNullOrEmpty(State.Current.ActivePatchId))
+                {
+                    <button class="btn btn-outline-primary btn-sm" @onclick="UpdateActive">Update</button>
+                }
+            </div>
+        </div>
+        @if (_status is not null) { <div class="text-success small mt-2">@_status</div> }
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Library (@_patches.Count)</div>
+    <div class="card-body p-0">
+        @if (_patches.Count == 0)
+        {
+            <p class="text-muted p-3 mb-0">No patches saved yet.</p>
+        }
+        else
+        {
+            <table class="table table-sm mb-0 align-middle">
+                <thead><tr><th>Name</th><th>Modules</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
+                <tbody>
+                @foreach (var p in _patches)
+                {
+                    var patch = p;
+                    <tr class="@(patch.Id == State.Current.ActivePatchId ? "table-active" : "")">
+                        <td>
+                            <strong>@patch.Name</strong>
+                            @if (patch.Id == State.Current.ActivePatchId) { <span class="badge bg-primary ms-1">active</span> }
+                            @if (!string.IsNullOrWhiteSpace(patch.Description)) { <div class="text-muted small">@patch.Description</div> }
+                        </td>
+                        <td class="small">@string.Join(", ", patch.ActiveModules.Select(m => $"{m.Key}={m.Value}"))</td>
+                        <td class="small text-muted">@patch.UpdatedAt.LocalDateTime.ToString("g")</td>
+                        <td class="text-end text-nowrap">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Load(patch.Id)">Load</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(patch.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private HardwareConfig _hw = new();
+    private List<Patch> _patches = new();
+    private List<string> _roles = new();
+    private Dictionary<string, List<Module>> _modulesByRole = new();
+
+    private string _name = "";
+    private string _description = "";
+    private string? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hw = HwOptions.Value;
+        await LoadModules();
+        await ReloadLibrary();
+        State.StateChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged(object? sender, SynthState state) => InvokeAsync(StateHasChanged);
+
+    private async Task LoadModules()
+    {
+        var modules = await ModuleMap.GetAllModulesAsync();
+        _modulesByRole = modules
+            .GroupBy(RoleOf)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        _roles = modules.Select(RoleOf).Distinct().ToList();
+    }
+
+    private static string RoleOf(Module m) =>
+        string.IsNullOrWhiteSpace(m.Role) ? m.Type.ToString().ToLowerInvariant() : m.Role;
+
+    private async Task ReloadLibrary() => _patches = (await Repo.GetAllAsync()).ToList();
+
+    private Task ChangeModule(string role, string? moduleId) =>
+        string.IsNullOrEmpty(moduleId) ? Task.CompletedTask : PatchSvc.ActivateModuleAsync(role, moduleId);
+
+    private async Task SetParam(ParameterSlot slot, string? raw)
+    {
+        if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var norm))
+            return;
+        await PatchSvc.SetParameterAsync(slot.Channel, slot.ScaleValue(norm), norm);
+    }
+
+    private Task SetToggle(string toggleId, bool isOn) => PatchSvc.SetToggleAsync(toggleId, isOn);
+
+    private async Task SaveNew()
+    {
+        var patch = await PatchSvc.SaveCurrentAsync(_name, _description);
+        _status = $"Saved “{patch.Name}”.";
+        await ReloadLibrary();
+    }
+
+    private async Task UpdateActive()
+    {
+        var name = string.IsNullOrWhiteSpace(_name) ? State.Current.ActivePatchName : _name;
+        var patch = await PatchSvc.SaveCurrentAsync(name, _description, State.Current.ActivePatchId);
+        _status = $"Updated “{patch.Name}”.";
+        await ReloadLibrary();
+    }
+
+    private async Task Load(string id)
+    {
+        await PatchSvc.LoadAsync(id);
+        var patch = _patches.FirstOrDefault(p => p.Id == id);
+        if (patch is not null)
+        {
+            _name = patch.Name;
+            _description = patch.Description;
+        }
+        _status = "Patch loaded.";
+        await ReloadLibrary();
+    }
+
+    private async Task Delete(string id)
+    {
+        await PatchSvc.DeleteAsync(id);
+        _status = "Patch deleted.";
+        await ReloadLibrary();
+    }
+
+    public void Dispose() => State.StateChanged -= OnStateChanged;
+}

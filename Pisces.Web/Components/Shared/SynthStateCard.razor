@@ -1,0 +1,98 @@
+@implements IDisposable
+@inject ISynthStateService State
+@inject IModuleMap ModuleMap
+
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Synth state</span>
+        <span class="text-muted">patch: <strong>@State.Current.ActivePatchName</strong>@(State.Current.IsSwitching ? " (switching…)" : "")</span>
+    </div>
+    <div class="card-body">
+        @if (_modulesByRole.Count == 0)
+        {
+            <p class="text-muted mb-0">No modules loaded.</p>
+        }
+        else
+        {
+            @foreach (var role in _roleOrder)
+            {
+                var module = ActiveModuleFor(role);
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>
+                            <span class="badge @(role == State.Current.SelectedModuleRole ? "bg-primary" : "bg-secondary")">@role</span>
+                            <strong class="ms-1">@(module?.Name ?? "—")</strong>
+                        </span>
+                    </div>
+                    @if (module is not null)
+                    {
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                            @foreach (var (slotName, slot) in module.Parameters.OrderBy(p => p.Key))
+                            {
+                                var value = State.Current.ParameterValues.GetValueOrDefault(slot.Channel);
+                                var active = State.Current.ActiveChannel == slot.Channel;
+                                <tr class="@(active ? "table-active" : "")">
+                                    <td style="width: 33%">@slot.Label <span class="text-muted small">@slot.Channel</span></td>
+                                    <td style="width: 22%" class="text-end">@slot.FormatValue(value)</td>
+                                    <td>
+                                        <div class="progress" style="height: 6px;">
+                                            <div class="progress-bar" style="width: @((slot.NormaliseValue(value) * 100).ToString("0.#"))%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+
+            @if (State.Current.ToggleStates.Count > 0)
+            {
+                <div>
+                    <span class="text-muted small">toggles</span>
+                    @foreach (var kv in State.Current.ToggleStates.OrderBy(k => k.Key))
+                    {
+                        <span class="badge @(kv.Value ? "bg-success" : "bg-secondary") ms-1">@kv.Key @(kv.Value ? "on" : "off")</span>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private Dictionary<string, List<Module>> _modulesByRole = new();
+    private List<string> _roleOrder = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadModulesAsync();
+        State.StateChanged += OnStateChanged;
+    }
+
+    /// <summary>Re-read the module map (call after the map is edited).</summary>
+    public async Task ReloadModulesAsync()
+    {
+        var modules = await ModuleMap.GetAllModulesAsync();
+        _modulesByRole = modules
+            .GroupBy(m => string.IsNullOrWhiteSpace(m.Role) ? m.Type.ToString().ToLowerInvariant() : m.Role)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        _roleOrder = modules
+            .Select(m => string.IsNullOrWhiteSpace(m.Role) ? m.Type.ToString().ToLowerInvariant() : m.Role)
+            .Distinct().ToList();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Module? ActiveModuleFor(string role)
+    {
+        var id = State.Current.ActiveModules.GetValueOrDefault(role, string.Empty);
+        return _modulesByRole.GetValueOrDefault(role)?.FirstOrDefault(m => m.Id == id)
+               ?? _modulesByRole.GetValueOrDefault(role)?.FirstOrDefault();
+    }
+
+    private void OnStateChanged(object? sender, SynthState state) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => State.StateChanged -= OnStateChanged;
+}

@@ -2,8 +2,6 @@
 @rendermode InteractiveServer
 @implements IDisposable
 
-@using Pisces.Core.Interfaces
-@using Pisces.Core.Models
 @using Pisces.Infrastructure.Configuration
 @using Pisces.Simulator
 @using Microsoft.Extensions.Options
@@ -17,21 +15,17 @@
 
 <h1>Virtual panel</h1>
 
+<EngineStatusCard />
+
 @if (_offline)
 {
     <div class="alert alert-warning">
-        Simulator mode is off. Set <code>"Pisces:UseSimulator": true</code> in
-        <code>appsettings.Development.json</code> and restart.
+        The virtual controls need simulator mode. Set <code>"Pisces:UseSimulator": true</code> in
+        <code>appsettings.Development.json</code> and restart. The engine log above still works.
     </div>
 }
 else
 {
-    <p class="text-muted">
-        Drives <code>SimulatedControlInput</code>. The control daemon resolves each turn through the
-        active module's parameter map and publishes onto the event bus; the simulated CSound engine
-        logs every channel write below.
-    </p>
-
     <div class="row">
         <div class="col-lg-7">
             <div class="card mb-3">
@@ -75,19 +69,6 @@ else
             </div>
 
             <div class="card mb-3">
-                <div class="card-header">Waveform selector</div>
-                <div class="card-body">
-                    @{ var waves = Hw.WaveSelector.WaveNames; }
-                    @for (var i = 0; i < waves.Count; i++)
-                    {
-                        var idx = i;
-                        <button class="btn btn-sm @(idx == _waveIndex ? "btn-primary" : "btn-outline-primary") me-1"
-                                @onclick="() => SetWave(idx)">@waves[idx]</button>
-                    }
-                </div>
-            </div>
-
-            <div class="card mb-3">
                 <div class="card-header">Toggles</div>
                 <div class="card-body">
                     @foreach (var tog in Hw.Toggles)
@@ -118,45 +99,15 @@ else
         </div>
 
         <div class="col-lg-5">
-            <div class="card mb-3">
-                <div class="card-header">Synth state</div>
-                <div class="card-body">
-                    <p class="mb-1">Selected role: <strong>@State.Current.SelectedModuleRole</strong></p>
-                    <p class="mb-1">Active channel: <strong>@(State.Current.ActiveChannel ?? "—")</strong></p>
-                    <p class="mb-2">Modules: @string.Join(", ", State.Current.ActiveModules.Select(m => $"{m.Key}={m.Value}"))</p>
-                    <table class="table table-sm">
-                        <thead><tr><th>Channel</th><th class="text-end">Value</th></tr></thead>
-                        <tbody>
-                        @foreach (var kv in State.Current.ParameterValues.OrderBy(k => k.Key))
-                        {
-                            <tr><td><code>@kv.Key</code></td><td class="text-end">@kv.Value.ToString("0.###")</td></tr>
-                        }
-                        @foreach (var kv in State.Current.ToggleStates.OrderBy(k => k.Key))
-                        {
-                            <tr><td><code>@kv.Key</code></td><td class="text-end">@(kv.Value ? "on" : "off")</td></tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="card mb-3">
-                <div class="card-header">CSound engine log</div>
-                <div class="card-body p-0">
-                    <pre class="mb-0 p-2" style="max-height: 320px; overflow-y: auto; font-size: 0.8rem;">@string.Join("\n", _log)</pre>
-                </div>
-            </div>
+            <SynthStateCard />
         </div>
     </div>
 }
 
 @code {
     private bool _offline;
-    private int _waveIndex;
     private HardwareConfig? _hw;
     private SimulatedControlInput? _input;
-    private SimulatedCsoundEngine? _csound;
-    private IReadOnlyList<string> _log = Array.Empty<string>();
     private Dictionary<string, Module> _modules = new();
 
     private HardwareConfig Hw => _hw!;
@@ -164,8 +115,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _input = Sp.GetService<SimulatedControlInput>();
-        _csound = Sp.GetService<SimulatedCsoundEngine>();
-        if (_input is null || _csound is null)
+        if (_input is null)
         {
             _offline = true;
             return;
@@ -173,19 +123,10 @@ else
 
         _hw = HwOptions.Value;
         _modules = (await ModuleMap.GetAllModulesAsync()).ToDictionary(m => m.Id);
-        _log = _csound.RecentLog();
-
         State.StateChanged += OnStateChanged;
-        _csound.LogReceived += OnLog;
     }
 
     private void OnStateChanged(object? sender, SynthState state) => InvokeAsync(StateHasChanged);
-
-    private void OnLog(object? sender, string line)
-    {
-        _log = _csound!.RecentLog();
-        InvokeAsync(StateHasChanged);
-    }
 
     private Module? ActiveModule
     {
@@ -204,20 +145,13 @@ else
 
     private void PressEncoder(string id) => _input!.SimulateEncoderPress(id);
 
-    private void SetWave(int i)
-    {
-        _waveIndex = i;
-        _input!.SimulateSelector(Hw.WaveSelector.Id, i);
-    }
-
     private void SetToggle(ToggleConfig toggle, bool isOn) => _input!.SimulateToggle(toggle.Id, isOn);
 
     private void Press(string id) => _input!.SimulateButtonPress(id);
 
     public void Dispose()
     {
-        State.StateChanged -= OnStateChanged;
-        if (_csound is not null)
-            _csound.LogReceived -= OnLog;
+        if (_input is not null)
+            State.StateChanged -= OnStateChanged;
     }
 }

@@ -44,6 +44,14 @@ public interface ICsoundEngine
     event EventHandler<string> LogReceived;
 
     /// <summary>
+    /// The most recent log lines, oldest first — what a UI would have missed
+    /// before subscribing to <see cref="LogReceived"/>. For the OSC client this
+    /// includes reachability lines ("CSound daemon reachable at host:port");
+    /// for the simulator it is the recorded channel writes.
+    /// </summary>
+    IReadOnlyList<string> RecentLog(int count = 40);
+
+    /// <summary>
     /// Fired when the CSound process stops unexpectedly.
     /// </summary>
     event EventHandler ProcessExited;

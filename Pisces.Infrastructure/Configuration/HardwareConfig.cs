@@ -10,7 +10,6 @@ public class HardwareConfig
 
     public SelectorEncoderConfig SelectorEncoder { get; init; } = new();
     public List<EncoderConfig> ParameterEncoders { get; init; } = [];
-    public WaveSelectorConfig WaveSelector { get; init; } = new();
     public List<ToggleConfig> Toggles { get; init; } = [];
     public List<ButtonConfig> Buttons { get; init; } = [];
     public List<OledConfig> OledDisplays { get; init; } = [];
@@ -35,15 +34,6 @@ public class EncoderConfig
     public int GpioSw { get; init; }
     public int DisplayIndex { get; init; }
     public int DisplayRow { get; init; }
-}
-
-public class WaveSelectorConfig
-{
-    public string Id { get; init; } = "wave";
-    // Left empty by default: the configuration binder appends to a pre-populated
-    // list rather than replacing it, which would duplicate the wave names.
-    public List<int> GpioPins { get; init; } = [];
-    public List<string> WaveNames { get; init; } = [];
 }
 
 public class ToggleConfig

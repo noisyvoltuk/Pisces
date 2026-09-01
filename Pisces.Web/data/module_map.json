@@ -2,6 +2,7 @@
   {
     "Id": "vco_saw",
     "Name": "Sawtooth VCO",
+    "Role": "vco",
     "Type": "Vco",
     "UdoFile": "vco_saw.udo",
     "Description": "Band-limited sawtooth oscillator",
@@ -13,21 +14,79 @@
     }
   },
   {
+    "Id": "lfo_vco_sine",
+    "Name": "Pitch LFO (sine)",
+    "Role": "vco_lfo",
+    "Type": "Lfo",
+    "UdoFile": "lfo_sine.udo",
+    "Description": "LFO summed into VCO pitch (mod_vco_pitch) — vibrato",
+    "Parameters": {
+      "param1": { "Channel": "vco_lfo_rate", "Label": "Rate", "Min": 0.05, "Max": 30, "Default": 5, "Unit": "Hz", "Logarithmic": true },
+      "param2": { "Channel": "vco_lfo_depth", "Label": "Depth", "Min": 0, "Max": 100, "Default": 0, "Unit": "c" },
+      "param3": { "Channel": "vco_lfo_shape", "Label": "Shape", "Min": 0, "Max": 4, "Default": 0 },
+      "param4": { "Channel": "vco_lfo_fade", "Label": "Fade In", "Min": 0, "Max": 5000, "Default": 0, "Unit": "ms" }
+    }
+  },
+  {
     "Id": "vcf_moog",
     "Name": "Moog Ladder VCF",
+    "Role": "vcf",
     "Type": "Vcf",
     "UdoFile": "vcf_moog.udo",
     "Description": "4-pole resonant low-pass ladder filter",
     "Parameters": {
       "param1": { "Channel": "vcf_cutoff", "Label": "Cutoff", "Min": 20, "Max": 18000, "Default": 1200, "Unit": "Hz", "Logarithmic": true },
       "param2": { "Channel": "vcf_resonance", "Label": "Res", "Min": 0, "Max": 1, "Default": 0.2 },
-      "param3": { "Channel": "vcf_env_amt", "Label": "Env Amt", "Min": 0, "Max": 1, "Default": 0.3 },
+      "param3": { "Channel": "flt_env_amt", "Label": "Env Amt", "Min": 0, "Max": 1, "Default": 0.3 },
       "param4": { "Channel": "vcf_keytrack", "Label": "Key Trk", "Min": 0, "Max": 1, "Default": 0 }
+    }
+  },
+  {
+    "Id": "lfo_vcf_sine",
+    "Name": "Filter LFO (sine)",
+    "Role": "vcf_lfo",
+    "Type": "Lfo",
+    "UdoFile": "lfo_sine.udo",
+    "Description": "LFO summed into VCF cutoff (mod_vcf_cutoff) — filter wobble, adds to the filter envelope",
+    "Parameters": {
+      "param1": { "Channel": "vcf_lfo_rate", "Label": "Rate", "Min": 0.05, "Max": 30, "Default": 1, "Unit": "Hz", "Logarithmic": true },
+      "param2": { "Channel": "vcf_lfo_depth", "Label": "Depth", "Min": 0, "Max": 48, "Default": 0, "Unit": "st" },
+      "param3": { "Channel": "vcf_lfo_shape", "Label": "Shape", "Min": 0, "Max": 4, "Default": 0 },
+      "param4": { "Channel": "vcf_lfo_retrig", "Label": "Retrig", "Min": 0, "Max": 1, "Default": 0 }
+    }
+  },
+  {
+    "Id": "adsr_flt",
+    "Name": "Filter Envelope",
+    "Role": "flt_env",
+    "Type": "Adsr",
+    "UdoFile": "",
+    "Description": "ADSR shaping the filter cutoff — built into the master orchestra, amount lives on the VCF",
+    "Parameters": {
+      "param1": { "Channel": "flt_att", "Label": "Attack", "Min": 1, "Max": 10000, "Default": 5, "Unit": "ms", "Logarithmic": true },
+      "param2": { "Channel": "flt_dec", "Label": "Decay", "Min": 1, "Max": 10000, "Default": 200, "Unit": "ms", "Logarithmic": true },
+      "param3": { "Channel": "flt_sus", "Label": "Sustain", "Min": 0, "Max": 1, "Default": 0.4 },
+      "param4": { "Channel": "flt_rel", "Label": "Release", "Min": 1, "Max": 10000, "Default": 300, "Unit": "ms", "Logarithmic": true }
+    }
+  },
+  {
+    "Id": "adsr_amp",
+    "Name": "Amp Envelope",
+    "Role": "amp_env",
+    "Type": "Adsr",
+    "UdoFile": "",
+    "Description": "ADSR controlling the VCA level — built into the master orchestra",
+    "Parameters": {
+      "param1": { "Channel": "amp_att", "Label": "Attack", "Min": 1, "Max": 10000, "Default": 5, "Unit": "ms", "Logarithmic": true },
+      "param2": { "Channel": "amp_dec", "Label": "Decay", "Min": 1, "Max": 10000, "Default": 400, "Unit": "ms", "Logarithmic": true },
+      "param3": { "Channel": "amp_sus", "Label": "Sustain", "Min": 0, "Max": 1, "Default": 0.8 },
+      "param4": { "Channel": "amp_rel", "Label": "Release", "Min": 1, "Max": 10000, "Default": 500, "Unit": "ms", "Logarithmic": true }
     }
   },
   {
     "Id": "fx_reverb",
     "Name": "Reverb + Delay FX",
+    "Role": "fx",
     "Type": "Fx",
     "UdoFile": "fx_reverb.udo",
     "Description": "Stereo reverb with a free-running delay line",

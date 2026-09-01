@@ -13,7 +13,6 @@ public sealed class SimulatedControlInput : IControlInput
     public event EventHandler<ButtonArgs>? EncoderPressed;
     public event EventHandler<ToggleChangedArgs>? ToggleChanged;
     public event EventHandler<ButtonArgs>? ButtonPressed;
-    public event EventHandler<SelectorChangedArgs>? SelectorChanged;
 
     public Task InitialiseAsync(CancellationToken ct = default) => Task.CompletedTask;
 
@@ -32,10 +31,6 @@ public sealed class SimulatedControlInput : IControlInput
     /// <summary>Called from the Blazor virtual panel to simulate a toggle change.</summary>
     public void SimulateToggle(string toggleId, bool isOn) =>
         ToggleChanged?.Invoke(this, new(toggleId, isOn, DateTimeOffset.UtcNow));
-
-    /// <summary>Called from the Blazor virtual panel to simulate selector position change.</summary>
-    public void SimulateSelector(string selectorId, int position) =>
-        SelectorChanged?.Invoke(this, new(selectorId, position, DateTimeOffset.UtcNow));
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

@@ -43,12 +43,6 @@ public sealed class SimulatedCsoundEngine : ICsoundEngine, IHostedService
             return Task.CompletedTask;
         }));
 
-        _subscriptions.Add(_bus.Subscribe<WaveSelectedEvent>((e, _) =>
-        {
-            Append($"WAVE   {e.WaveName}");
-            return Task.CompletedTask;
-        }));
-
         _running = true;
         Append("engine started (simulated — no audio)");
         return Task.CompletedTask;
