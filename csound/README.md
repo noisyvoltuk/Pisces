@@ -27,8 +27,19 @@ dotnet run --project ../Pisces.Web -- --Pisces:UseSimulator=false --Csound:LogUn
 ```
 
 The web monitor should flip to **CSound engine — OSC / online**. The csound
-terminal prints `ping N -> pong`. Move a slider on the Patch workbench and the
-matching `chnset` happens (add a `printk` to watch it).
+terminal prints `ping N -> pong`.
+
+**Check param routing works.** Add a debug line in instr 1 (inside the param
+`while` loop, after `chnset`):
+
+```csound
+printf "param %s = %f\n", km1, Sp, kpv
+```
+
+Move **Cutoff** on the Patch workbench — you should see `param vcf_cutoff = ...`
+and nothing else. If every slider prints the same channel name, your csound's
+k-rate `chnset` isn't re-resolving the dynamic name; tell me and I'll switch
+instr 1 to an explicit per-channel dispatch.
 
 **2. Add audio.**
 
@@ -70,3 +81,7 @@ the app pushes anything. Modulation buses: `mod_vco_pitch`, `mod_vcf_cutoff`
 - No `PatchRenderer`; patches are applied as live channel values, not rendered `.csd`.
 - The reply port for `/pisces/pong` is the constant `giReplyPort` in the `.csd`
   (OSCsend needs an i-rate port). Keep it equal to `Csound:OscListenPort`.
+- instr 1 routes `/pisces/param` by writing `chnset kval, Svar` with a runtime
+  channel name. This relies on the k-rate `chnset` re-resolving the name — fine
+  on Csound 6.13+. The string vars are seeded with real channel names so the
+  i-time bind is valid.

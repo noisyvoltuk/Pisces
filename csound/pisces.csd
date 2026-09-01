@@ -95,8 +95,12 @@ endin
 
 ; ==================================================== instr 1: OSC control ===
 instr 1
+  ; The string channel-name vars are seeded with REAL channel names (created by
+  ; instr 99) so the i-time pass of chnset has a valid name to bind to. The
+  ; k-rate chnset variant re-resolves the channel by name when a message updates
+  ; the string.
   ; --- /pisces/param  (name, value) -> named control channel ---
-  Sp    init ""
+  Sp    init "vco_saw_tune"
   kpv   init 0
   km1   init 1
   while km1 == 1 do
@@ -107,7 +111,7 @@ instr 1
   od
 
   ; --- /pisces/toggle  (name, 0|1) ---
-  St    init ""
+  St    init "vcf_bypass"
   ktv   init 0
   km2   init 1
   while km2 == 1 do
@@ -118,15 +122,15 @@ instr 1
   od
 
   ; --- /pisces/module  (role, moduleId) — logged only in the starter ---
-  Srole init ""
-  Smod  init ""
+  Srole init "vco"
+  Smod  init "vco_saw"
   km3   OSClisten gi_osc, "/pisces/module", "ss", Srole, Smod
   if km3 == 1 then
     printf "module: %s -> %s\n", km3, Srole, Smod
   endif
 
   ; --- /pisces/patch/begin | /pisces/patch/end  — drained, no-op for now ---
-  Spid  init ""
+  Spid  init "none"
   kb    OSClisten gi_osc, "/pisces/patch/begin", "s", Spid
   ke    OSClisten gi_osc, "/pisces/patch/end",   "s", Spid
 
