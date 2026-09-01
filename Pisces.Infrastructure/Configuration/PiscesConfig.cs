@@ -23,8 +23,17 @@ public class PiscesConfig
     public string DataDirectory { get; init; } = "data";
 
     /// <summary>
-    /// When true, virtual hardware and a simulated CSound engine are registered
-    /// instead of the real GPIO / OSC implementations.
+    /// When true, the virtual control panel (<c>SimulatedControlInput</c>, the
+    /// <c>/simulator</c> page) is registered as <see cref="Pisces.Core.Interfaces.IControlInput"/>
+    /// instead of real GPIO hardware. Independent of <see cref="UseSimulatedCsound"/> —
+    /// the virtual panel can drive a real CSound daemon over OSC.
     /// </summary>
     public bool UseSimulator { get; init; }
+
+    /// <summary>
+    /// When true, the no-audio logging engine (<c>SimulatedCsoundEngine</c>) is registered
+    /// as <see cref="Pisces.Core.Interfaces.ICsoundEngine"/> instead of the real OSC client.
+    /// Independent of <see cref="UseSimulator"/>.
+    /// </summary>
+    public bool UseSimulatedCsound { get; init; }
 }

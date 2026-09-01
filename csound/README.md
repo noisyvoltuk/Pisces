@@ -49,13 +49,25 @@ csound pisces.csd -+rtaudio=jack -odac -d      # JACK
 csound --devices                               # list output devices
 ```
 
-**3. Add MIDI.** `-Ma` grabs all ALSA MIDI. No controller? use a virtual port:
+**3. Add MIDI.**
 
+Linux/ALSA — `-Ma` grabs all MIDI. No controller? use a virtual port:
 ```bash
 sudo modprobe snd-virmidi
 csound pisces.csd -odac -M hw:VirMIDI -d
 # then play it:  vmpk   (or  aplaymidi -p VirMIDI:0 something.mid)
 ```
+
+Windows — PortMIDI needs a device number, not `-Ma`:
+```bash
+csound --midi-devices          # or: csound -M999 pisces.csd  (bad number -> prints the list)
+csound pisces.csd -odac -M0    # -M<n> for one device, -Mm for all (port-mapped)
+```
+No controller on Windows? install **loopMIDI** (virtual port) + **VMPK** (on-screen
+keyboard), point VMPK at the loopMIDI port, and give csound that port's number.
+
+Without any MIDI the always-on instruments (OSC listener, LFOs, FX) still run, so
+you can verify the handshake and channel routing — you just get no notes.
 
 **4. Run as a service** (enables the journalctl log tail in the web UI):
 

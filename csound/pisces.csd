@@ -18,9 +18,13 @@
 ; =============================================================================
 
 <CsOptions>
-; Desktop dev box: default audio + all MIDI. Override on the CLI as needed
-; (e.g. -odac:hw:0,0 on the Pi, -n for a soundless OSC-only test).
--odac -Ma -d -m0
+; Audio out + no display. Add MIDI and tune the device on the command line —
+; it's platform-specific:
+;   Linux/ALSA : -Ma                 (all MIDI, merged)
+;   Windows    : -M0  or  -Mm        (PortMIDI wants a number, not a name)
+;   Pi + DAC   : -odac:hw:0,0
+;   OSC-only   : replace -odac with -n  (no sound)
+-odac -d
 </CsOptions>
 
 <CsInstruments>

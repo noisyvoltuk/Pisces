@@ -30,17 +30,25 @@ builder.Services.AddSingleton<IPatchRepository, JsonPatchRepository>();
 builder.Services.AddSingleton<PatchService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PatchService>());
 
-// --- Engine: simulator on Windows, OSC client against the CSound daemon on the Pi ---
+// --- Controls and engine are independent: the virtual panel can drive a real
+//     CSound daemon, and (once built) real hardware could exercise the simulated
+//     engine. Two separate flags, not one. ---
 var piscesConfig = builder.Configuration.GetSection(PiscesConfig.Section).Get<PiscesConfig>() ?? new PiscesConfig();
+
 if (piscesConfig.UseSimulator)
 {
-    builder.Services.AddPiscesSimulator();
+    builder.Services.AddPiscesSimulatedControls();
     builder.Services.AddHostedService<ControlDaemonService>();
+}
+// else: Pisces.Hardware will register the real IControlInput + the control daemon here.
+
+if (piscesConfig.UseSimulatedCsound)
+{
+    builder.Services.AddPiscesSimulatedCsound();
 }
 else
 {
     builder.Services.AddPiscesCsound();
-    // Pisces.Hardware will register the real IControlInput + the control daemon here.
 }
 
 // Reachability monitor works against ICsoundEngine in either mode.

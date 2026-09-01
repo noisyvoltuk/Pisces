@@ -181,11 +181,21 @@ TFT shows all module roles, currently selected role highlighted, key parameter s
 
 ## Development on Windows
 
-Set `"UseSimulator": true` in `appsettings.json`.
-The `Pisces.Simulator` project provides `SimulatedControlInput` and `SimulatedDisplay`
-which are registered via DI instead of the real hardware implementations.
-The Blazor UI includes a virtual panel page (`/simulator`) when simulator mode is active.
-CSound is not required in simulator mode — `SimulatedCsoundEngine` logs channel changes.
+Two independent flags in `Pisces` config — mix and match, don't assume they're linked:
+
+- `UseSimulator` — registers `SimulatedControlInput` (the `/simulator` virtual panel page)
+  as `IControlInput` instead of real GPIO.
+- `UseSimulatedCsound` — registers `SimulatedCsoundEngine` (logs channel writes, no audio)
+  as `ICsoundEngine` instead of `CsoundOscClient`.
+
+Both `true` (the `appsettings.Development.json` default) needs nothing else running.
+`UseSimulator: true` + `UseSimulatedCsound: false` drives a **real** CSound daemon
+(local or on the Pi) from the virtual panel — the common "no hardware yet, but I
+want real audio" setup. Override on the command line without editing the file:
+
+```bash
+dotnet run --project Pisces.Web -- --Pisces:UseSimulatedCsound=false
+```
 
 ## Naming Conventions
 
