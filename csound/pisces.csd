@@ -114,11 +114,6 @@ instr 1
     endif
   od
 
-  ; --- DEBUG: prints whenever the vcf_cutoff channel value actually changes ---
-  kdbgc chnget "vcf_cutoff"
-  printk2 kdbgc
-  ; --- end debug ---
-
   ; --- /pisces/toggle  (name, 0|1) ---
   St    init "vcf_bypass"
   ktv   init 0
@@ -149,9 +144,10 @@ instr 1
   kpg    OSClisten gi_osc, "/pisces/ping", "ii", knonce, kport
   ; reply port is i-rate for OSCsend, so we use the configured constant
   OSCsend knonce, "127.0.0.1", giReplyPort, "/pisces/pong", "i", knonce
-  if kpg == 1 then
-    printf "ping %d -> pong\n", knonce, knonce
-  endif
+  ; uncomment to watch the heartbeat in the terminal:
+  ; if kpg == 1 then
+  ;   printf "ping %d -> pong\n", knonce, knonce
+  ; endif
 endin
 
 ; ================================================= instr 20: VCO pitch LFO ===

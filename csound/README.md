@@ -26,20 +26,25 @@ csound pisces.csd -n -d            # -n = no sound out
 dotnet run --project ../Pisces.Web -- --Pisces:UseSimulator=false --Csound:LogUnit=
 ```
 
-The web monitor should flip to **CSound engine — OSC / online**. The csound
-terminal prints `ping N -> pong`.
+The web monitor should flip to **CSound engine — OSC / online**. To watch the
+heartbeat, uncomment the `printf "ping %d -> pong"` block in instr 1.
 
-**Check param routing works.** Add a debug line in instr 1 (inside the param
-`while` loop, after `chnset`):
+**Check param routing.** Temporarily add, at instr 1 scope (after the param
+`while` loop):
 
 ```csound
-printf "param %s = %f\n", km1, Sp, kpv
+kdbg chnget "vcf_cutoff"
+printk2 kdbg
 ```
 
-Move **Cutoff** on the Patch workbench — you should see `param vcf_cutoff = ...`
-and nothing else. If every slider prints the same channel name, your csound's
-k-rate `chnset` isn't re-resolving the dynamic name; tell me and I'll switch
-instr 1 to an explicit per-channel dispatch.
+Move **Cutoff** on the Patch workbench — `printk2` should print the new value
+each time you drag. If it never changes, your csound's k-rate `chnset` isn't
+re-resolving the dynamic channel name — switch instr 1 to explicit per-channel
+dispatch.
+
+> Note: each OSC-drain `while` loop re-arms its counter (`km1 = 1` etc.) every
+> k-pass. Without that the loop stops running after the first empty poll and only
+> the unconditional `OSClisten` calls (like ping) keep working.
 
 **2. Add audio.**
 
