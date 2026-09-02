@@ -106,19 +106,18 @@ instr 1
   ; --- /pisces/param  (name, value) -> named control channel ---
   Sp    init "vco_saw_tune"
   kpv   init 0
-  kdbgn init 0
   km1 = 1                              ; re-arm the drain loop every k-pass
   while km1 == 1 do
     km1 OSClisten gi_osc, "/pisces/param", "sf", Sp, kpv
     if km1 == 1 then
       chnset kpv, Sp
-      ; --- DEBUG: remove once routing is confirmed ---
-      kdbgn = kdbgn + 1
-      kdbgc chnget "vcf_cutoff"
-      printf "PARAM %s = %f   (vcf_cutoff channel = %f)\n", kdbgn, Sp, kpv, kdbgc
-      ; --- end debug ---
     endif
   od
+
+  ; --- DEBUG: prints whenever the vcf_cutoff channel value actually changes ---
+  kdbgc chnget "vcf_cutoff"
+  printk2 kdbgc
+  ; --- end debug ---
 
   ; --- /pisces/toggle  (name, 0|1) ---
   St    init "vcf_bypass"
