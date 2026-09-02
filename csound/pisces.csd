@@ -106,8 +106,8 @@ instr 1
   ; --- /pisces/param  (name, value) -> named control channel ---
   Sp    init "vco_saw_tune"
   kpv   init 0
-  km1   init 1
   kdbgn init 0
+  km1 = 1                              ; re-arm the drain loop every k-pass
   while km1 == 1 do
     km1 OSClisten gi_osc, "/pisces/param", "sf", Sp, kpv
     if km1 == 1 then
@@ -123,7 +123,7 @@ instr 1
   ; --- /pisces/toggle  (name, 0|1) ---
   St    init "vcf_bypass"
   ktv   init 0
-  km2   init 1
+  km2 = 1
   while km2 == 1 do
     km2 OSClisten gi_osc, "/pisces/toggle", "si", St, ktv
     if km2 == 1 then
