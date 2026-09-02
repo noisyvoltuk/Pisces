@@ -107,10 +107,16 @@ instr 1
   Sp    init "vco_saw_tune"
   kpv   init 0
   km1   init 1
+  kdbgn init 0
   while km1 == 1 do
     km1 OSClisten gi_osc, "/pisces/param", "sf", Sp, kpv
     if km1 == 1 then
       chnset kpv, Sp
+      ; --- DEBUG: remove once routing is confirmed ---
+      kdbgn = kdbgn + 1
+      kdbgc chnget "vcf_cutoff"
+      printf "PARAM %s = %f   (vcf_cutoff channel = %f)\n", kdbgn, Sp, kpv, kdbgc
+      ; --- end debug ---
     endif
   od
 
