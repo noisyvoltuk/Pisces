@@ -1,0 +1,27 @@
+# Pisces .NET app (Blazor UI + control/display daemons + OSC client).
+# Talks to pisces-csound.service only over OSC — starts after it, but tolerates
+# it being down and reconnects.
+#
+#   sudo cp pisces-web.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pisces-web
+#   journalctl -u pisces-web -f
+
+[Unit]
+Description=Pisces web / control app
+After=network-online.target pisces-csound.service
+Wants=network-online.target
+# ordering only — the app survives csound being absent
+Wants=pisces-csound.service
+
+[Service]
+# Path to the self-contained publish output (the apphost, not "dotnet ...").
+WorkingDirectory=/home/pi/pisces/app
+ExecStart=/home/pi/pisces/app/Pisces.Web
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Restart=always
+RestartSec=3
+User=pi
+
+[Install]
+WantedBy=multi-user.target

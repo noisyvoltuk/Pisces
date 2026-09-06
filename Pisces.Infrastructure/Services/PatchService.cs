@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 using Pisces.Core.Events;
 using Pisces.Core.Interfaces;
 using Pisces.Core.Models;
-using Pisces.Infrastructure.Configuration;
+using Pisces.Core.Configuration;
 
 namespace Pisces.Infrastructure.Services;
 

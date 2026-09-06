@@ -13,6 +13,8 @@
     <ProjectReference Include="..\Pisces.CSound\Pisces.CSound.csproj" />
     <!-- Virtual hardware for development; registered only when Pisces:UseSimulator is true. -->
     <ProjectReference Include="..\Pisces.Simulator\Pisces.Simulator.csproj" />
+    <!-- Real GPIO control input; registered only when Pisces:UseSimulator is false. -->
+    <ProjectReference Include="..\Pisces.Hardware\Pisces.Hardware.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,7 @@
+using Pisces.Core.Configuration;
 using Pisces.Core.Interfaces;
 using Pisces.CSound;
+using Pisces.Hardware;
 using Pisces.Infrastructure;
 using Pisces.Infrastructure.Configuration;
 using Pisces.Infrastructure.EventBus;
@@ -35,12 +37,35 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PatchService>());
 //     engine. Two separate flags, not one. ---
 var piscesConfig = builder.Configuration.GetSection(PiscesConfig.Section).Get<PiscesConfig>() ?? new PiscesConfig();
 
-if (piscesConfig.UseSimulator)
-{
+// Control input: virtual panel, real GPIO, or both — when both, a composite fans
+// them into the one daemon and each surface mirrors the other via the synth state.
+var useSimControls = piscesConfig.UseSimulator;
+var useHwControls = piscesConfig.UseHardwareControls;
+
+if (useSimControls)
     builder.Services.AddPiscesSimulatedControls();
-    builder.Services.AddHostedService<ControlDaemonService>();
+if (useHwControls)
+    builder.Services.AddPiscesHardware();
+
+if (useSimControls && useHwControls)
+{
+    builder.Services.AddSingleton<IControlInput>(sp => new CompositeControlInput(new IControlInput[]
+    {
+        sp.GetRequiredService<SimulatedControlInput>(),
+        sp.GetRequiredService<EncoderBank>()
+    }));
 }
-// else: Pisces.Hardware will register the real IControlInput + the control daemon here.
+else if (useSimControls)
+{
+    builder.Services.AddSingleton<IControlInput>(sp => sp.GetRequiredService<SimulatedControlInput>());
+}
+else if (useHwControls)
+{
+    builder.Services.AddSingleton<IControlInput>(sp => sp.GetRequiredService<EncoderBank>());
+}
+
+if (useSimControls || useHwControls)
+    builder.Services.AddHostedService<ControlDaemonService>();
 
 if (piscesConfig.UseSimulatedCsound)
 {

@@ -36,4 +36,11 @@ public class PiscesConfig
     /// Independent of <see cref="UseSimulator"/>.
     /// </summary>
     public bool UseSimulatedCsound { get; init; }
+
+    /// <summary>
+    /// When true, the real GPIO encoders/switches (<c>EncoderBank</c>) feed the synth.
+    /// May be combined with <see cref="UseSimulator"/> — the physical panel and the
+    /// <c>/simulator</c> page then run side by side, each mirroring the other.
+    /// </summary>
+    public bool UseHardwareControls { get; init; }
 }

@@ -13,11 +13,14 @@ namespace Pisces.Simulator;
 /// </summary>
 public static class SimulatorServiceCollectionExtensions
 {
-    /// <summary>Registers the virtual control panel as <see cref="IControlInput"/>.</summary>
+    /// <summary>
+    /// Registers the virtual control panel (<see cref="SimulatedControlInput"/>) as a
+    /// concrete singleton. Program.cs binds it to <see cref="IControlInput"/> — on its own,
+    /// or fanned together with the GPIO input via a composite.
+    /// </summary>
     public static IServiceCollection AddPiscesSimulatedControls(this IServiceCollection services)
     {
         services.AddSingleton<SimulatedControlInput>();
-        services.AddSingleton<IControlInput>(sp => sp.GetRequiredService<SimulatedControlInput>());
         return services;
     }
 

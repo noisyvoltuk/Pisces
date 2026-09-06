@@ -10,8 +10,21 @@
     <ProjectReference Include="..\Pisces.Core\Pisces.Core.csproj" />
   </ItemGroup>
 
-  <!-- Real GPIO/I2C/SPI drivers only build for the Pi target runtime -->
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-arm64'">
+  <!--
+    System.Device.Gpio / Iot.Device.Bindings are portable managed packages — they
+    compile on any OS and only throw at runtime if you actually try to open a GPIO
+    chip on an unsupported platform. That only happens here when Pisces:UseSimulator
+    is false, i.e. never on a dev machine. Keeping them RID-conditional was tried
+    and reverted: MSBuild does not reliably propagate RuntimeIdentifier into a plain
+    ProjectReference (confirmed empirically — the "real" self-contained linux-arm64
+    publish still compiled the non-GPIO code path), so gating on it silently shipped
+    the wrong build. Unconditional is simple and correct; the small extra restore
+    size on non-Pi builds is a fair trade.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
     <PackageReference Include="System.Device.Gpio" Version="4.2.0" />
     <PackageReference Include="Iot.Device.Bindings" Version="4.2.0" />
   </ItemGroup>

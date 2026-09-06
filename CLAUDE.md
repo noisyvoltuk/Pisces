@@ -181,20 +181,28 @@ TFT shows all module roles, currently selected role highlighted, key parameter s
 
 ## Development on Windows
 
-Two independent flags in `Pisces` config — mix and match, don't assume they're linked:
+Three independent `Pisces` config flags — mix and match, they're not linked:
 
-- `UseSimulator` — registers `SimulatedControlInput` (the `/simulator` virtual panel page)
-  as `IControlInput` instead of real GPIO.
-- `UseSimulatedCsound` — registers `SimulatedCsoundEngine` (logs channel writes, no audio)
-  as `ICsoundEngine` instead of `CsoundOscClient`.
+- `UseSimulator` — `SimulatedControlInput` (the `/simulator` virtual panel page) feeds the synth.
+- `UseHardwareControls` — the real GPIO encoders/switches (`EncoderBank`) feed the synth.
+- `UseSimulatedCsound` — `SimulatedCsoundEngine` (logs channel writes, no audio) stands in for `CsoundOscClient`.
 
-Both `true` (the `appsettings.Development.json` default) needs nothing else running.
-`UseSimulator: true` + `UseSimulatedCsound: false` drives a **real** CSound daemon
-(local or on the Pi) from the virtual panel — the common "no hardware yet, but I
-want real audio" setup. Override on the command line without editing the file:
+`UseSimulator` + `UseHardwareControls` can **both** be true: a `CompositeControlInput` fans
+them into the one `ControlDaemonService`, and the physical panel, the `/simulator` page and
+the `/patches` workbench all mirror each other through the shared synth state. If GPIO is
+unavailable (wrong platform, missing `gpio` group), `EncoderBank` logs and the app still runs.
+
+| setup | UseSimulator | UseHardwareControls | UseSimulatedCsound |
+|---|---|---|---|
+| Windows dev (`appsettings.Development.json`) | true | false | false (needs a local csound) |
+| Pi (`appsettings.json`) | true | true | false |
+| no-hardware, real audio | true | false | false |
+| fully offline | true | false | true |
+
+Override on the command line without editing the file:
 
 ```bash
-dotnet run --project Pisces.Web -- --Pisces:UseSimulatedCsound=false
+dotnet run --project Pisces.Web -- --Pisces:UseSimulatedCsound=true
 ```
 
 ## Naming Conventions
