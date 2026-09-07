@@ -125,13 +125,14 @@ instr 1
     endif
   od
 
-  ; --- /pisces/module  (role, moduleId) — logged only in the starter ---
+  ; --- /pisces/module  (role, moduleId) ---
   Srole init "vco"
   Smod  init "vco_saw"
   km3   OSClisten gi_osc, "/pisces/module", "ss", Srole, Smod
-  if km3 == 1 then
-    printf "module: %s -> %s\n", km3, Srole, Smod
-  endif
+  ; uncomment to watch module selection in the terminal:
+  ; if km3 == 1 then
+  ;   printf "module: %s -> %s\n", km3, Srole, Smod
+  ; endif
 
   ; --- /pisces/patch/begin | /pisces/patch/end  — drained, no-op for now ---
   Spid  init "none"

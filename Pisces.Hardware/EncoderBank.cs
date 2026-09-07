@@ -7,23 +7,53 @@ using Pisces.Core.Interfaces;
 namespace Pisces.Hardware;
 
 /// <summary>
-/// Real GPIO implementation of <see cref="IControlInput"/> — rotary encoders
-/// (CLK/DT quadrature + SW push button), toggle switches, and momentary buttons.
-/// Registered instead of <c>SimulatedControlInput</c> when Pisces:UseSimulator is false.
+/// Real GPIO implementation of <see cref="IControlInput"/>.
 ///
-/// Assumes standard cheap rotary encoder modules (KY-040 style) and momentary
-/// switches wired active-low to ground, using the SoC's internal pull-ups —
-/// no external resistors needed. If your wiring is active-high, flip the
-/// polarity checks below.
+/// Rotary encoders are decoded by <b>polling</b> CLK/DT on a background thread and
+/// running a Gray-code state machine — <c>System.Device.Gpio</c>'s edge callbacks
+/// drop the short pulses during a detent on this hardware. Push buttons and toggle
+/// switches use edge callbacks (their transitions are long and clean), debounced
+/// in software.
+///
+/// Assumes cheap KY-040 style encoders / momentary switches wired active-low to
+/// ground using the SoC's internal pull-ups — no external resistors.
 /// </summary>
 public sealed class EncoderBank : IControlInput
 {
-    private const int EncoderDebounceMs = 2;   // contact bounce on the CLK line
-    private const int ButtonDebounceMs = 40;   // tactile switch bounce
+    private const int ButtonDebounceMs = 40;
+    private const int PollIntervalMs = 1;
+
+    // Steps the accumulator gains over one physical detent. 4 = a standard
+    // encoder (one full Gray cycle per detent). If a detent moves things twice
+    // as far as you want, set 8; if it takes two detents per step, set 2.
+    private const int StepsPerDetent = 4;
+
+    // Gray-code transition table: index = (prevAB << 2) | curAB, AB = (CLK<<1)|DT.
+    // ±1 per valid single-bit transition, 0 for no-change or an illegal 2-bit jump.
+    private static readonly int[] Quadrature =
+    {
+         0, -1,  1,  0,
+         1,  0,  0, -1,
+        -1,  0,  0,  1,
+         0,  1, -1,  0,
+    };
 
     private readonly HardwareConfig _hw;
     private readonly ILogger<EncoderBank> _logger;
+    private readonly List<Encoder> _encoders = new();
+    private readonly CancellationTokenSource _cts = new();
+
     private GpioController? _gpio;
+    private Thread? _pollThread;
+
+    private sealed class Encoder
+    {
+        public required string Id;
+        public required int ClkPin;
+        public required int DtPin;
+        public int LastAb;
+        public int Accum;
+    }
 
     public EncoderBank(IOptions<HardwareConfig> hardware, ILogger<EncoderBank> logger)
     {
@@ -80,6 +110,12 @@ public sealed class EncoderBank : IControlInput
                 (id, ts) => ButtonPressed?.Invoke(this, new ButtonArgs(id, ts))));
         }
 
+        if (_encoders.Count > 0)
+        {
+            _pollThread = new Thread(PollLoop) { IsBackground = true, Name = "pisces-encoders" };
+            _pollThread.Start();
+        }
+
         _logger.LogInformation(
             "EncoderBank initialised: {Encoders} encoder(s), {Toggles} toggle(s), {Buttons} button(s)",
             _hw.ParameterEncoders.Count + 1, _hw.Toggles.Count, _hw.Buttons.Count);
@@ -99,36 +135,57 @@ public sealed class EncoderBank : IControlInput
         }
     }
 
-    /// <summary>
-    /// Standard two-phase (CLK/DT) quadrature decode: on every CLK falling edge,
-    /// DT tells you which way the shaft turned. Gives one step per detent on the
-    /// common cheap encoder modules; if yours reports 2 or 4 steps per detent,
-    /// divide down in ControlDaemonService rather than here.
-    /// </summary>
     private void SetupEncoder(string id, int clkPin, int dtPin)
     {
         _gpio!.OpenPin(clkPin, PinMode.InputPullUp);
         _gpio.OpenPin(dtPin, PinMode.InputPullUp);
 
-        var lastClk = _gpio.Read(clkPin);
-        var lastEdgeMs = Environment.TickCount64;
+        var enc = new Encoder { Id = id, ClkPin = clkPin, DtPin = dtPin };
+        enc.LastAb = ReadAb(enc);
+        _encoders.Add(enc);
+        _logger.LogDebug("encoder {Id}: CLK=GPIO{Clk} DT=GPIO{Dt}", id, clkPin, dtPin);
+    }
 
-        _gpio.RegisterCallbackForPinValueChangedEvent(clkPin, PinEventTypes.Falling, (_, _) =>
+    private int ReadAb(Encoder e) =>
+        ((_gpio!.Read(e.ClkPin) == PinValue.High ? 1 : 0) << 1) | (_gpio.Read(e.DtPin) == PinValue.High ? 1 : 0);
+
+    private void PollLoop()
+    {
+        while (!_cts.IsCancellationRequested)
         {
-            var now = Environment.TickCount64;
-            if (now - lastEdgeMs < EncoderDebounceMs)
-                return;
-            lastEdgeMs = now;
+            try
+            {
+                foreach (var e in _encoders)
+                {
+                    var ab = ReadAb(e);
+                    if (ab == e.LastAb)
+                        continue;
 
-            var clk = _gpio.Read(clkPin);
-            if (clk == lastClk)
-                return;
-            lastClk = clk;
+                    var step = Quadrature[(e.LastAb << 2) | ab];
+                    e.LastAb = ab;
+                    if (step == 0)
+                        continue;
 
-            var dt = _gpio.Read(dtPin);
-            var delta = dt != clk ? 1 : -1;
-            EncoderChanged?.Invoke(this, new EncoderChangedArgs(id, delta, DateTimeOffset.UtcNow));
-        });
+                    e.Accum += step;
+                    if (e.Accum >= StepsPerDetent) { e.Accum = 0; Emit(e.Id, 1); }
+                    else if (e.Accum <= -StepsPerDetent) { e.Accum = 0; Emit(e.Id, -1); }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!_cts.IsCancellationRequested)
+                    _logger.LogDebug(ex, "encoder poll read failed");
+            }
+
+            try { Thread.Sleep(PollIntervalMs); }
+            catch { /* shutting down */ }
+        }
+    }
+
+    private void Emit(string id, int delta)
+    {
+        _logger.LogTrace("encoder {Id} {Delta:+0;-0}", id, delta);
+        EncoderChanged?.Invoke(this, new EncoderChangedArgs(id, delta, DateTimeOffset.UtcNow));
     }
 
     /// <summary>A momentary, active-low, debounced push button (encoder SW pin or a standalone button).</summary>
@@ -143,6 +200,7 @@ public sealed class EncoderBank : IControlInput
             if (now - lastMs < ButtonDebounceMs)
                 return;
             lastMs = now;
+            _logger.LogDebug("button {Id} pressed", id);
             onPress(id, DateTimeOffset.UtcNow);
         });
     }
@@ -165,13 +223,17 @@ public sealed class EncoderBank : IControlInput
             if (isOn == lastOn)
                 return;
             lastOn = isOn;
+            _logger.LogDebug("toggle {Id} {State}", id, isOn ? "on" : "off");
             ToggleChanged?.Invoke(this, new ToggleChangedArgs(id, isOn, DateTimeOffset.UtcNow));
         });
     }
 
     public ValueTask DisposeAsync()
     {
+        _cts.Cancel();
+        _pollThread?.Join(TimeSpan.FromMilliseconds(200));
         _gpio?.Dispose();
+        _cts.Dispose();
         return ValueTask.CompletedTask;
     }
 }
