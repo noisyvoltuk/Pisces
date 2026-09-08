@@ -67,6 +67,12 @@ else if (useHwControls)
 if (useSimControls || useHwControls)
     builder.Services.AddHostedService<ControlDaemonService>();
 
+if (piscesConfig.UseHardwareDisplays)
+{
+    builder.Services.AddPiscesDisplays();
+    builder.Services.AddHostedService<DisplayDaemonService>();
+}
+
 if (piscesConfig.UseSimulatedCsound)
 {
     builder.Services.AddPiscesSimulatedCsound();

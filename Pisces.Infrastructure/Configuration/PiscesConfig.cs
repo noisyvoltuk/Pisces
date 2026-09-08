@@ -43,4 +43,9 @@ public class PiscesConfig
     /// <c>/simulator</c> page then run side by side, each mirroring the other.
     /// </summary>
     public bool UseHardwareControls { get; init; }
+
+    /// <summary>
+    /// When true, <c>DisplayDaemonService</c> drives the physical OLED/TFT panels.
+    /// </summary>
+    public bool UseHardwareDisplays { get; init; }
 }
