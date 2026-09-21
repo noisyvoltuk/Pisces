@@ -6,8 +6,9 @@ namespace Pisces.Hardware;
 
 /// <summary>
 /// SSD1306 128x64 OLED over I2C, driven with a raw framebuffer and an embedded
-/// 5x8 font — no graphics-library / native dependencies. One panel, wired directly
-/// to the I2C bus (TCA9548A multiplexing is a later addition).
+/// 5x8 font — no graphics-library / native dependencies. Every panel answers at
+/// the same address (0x3C), so when a <see cref="Tca9548a"/> multiplexer is wired
+/// in, its channel must be selected immediately before each transaction.
 /// </summary>
 public sealed class OledDisplay : IDisplayDriver
 {
@@ -39,6 +40,8 @@ public sealed class OledDisplay : IDisplayDriver
 
     private readonly int _busId;
     private readonly int _address;
+    private readonly Tca9548a? _mux;
+    private readonly int _muxChannel;
     private readonly ILogger<OledDisplay> _logger;
     private readonly byte[] _frame = new byte[Cols * Pages];
     private readonly byte[] _flushBuffer = new byte[1 + Cols * Pages];
@@ -46,13 +49,25 @@ public sealed class OledDisplay : IDisplayDriver
 
     private I2cDevice? _i2c;
 
-    public OledDisplay(int displayIndex, int busId, int address, ILogger<OledDisplay> logger)
+    public OledDisplay(int displayIndex, int busId, int address, Tca9548a? mux, int muxChannel,
+        ILogger<OledDisplay> logger)
     {
         DisplayIndex = displayIndex;
         _busId = busId;
         _address = address;
+        _mux = mux;
+        _muxChannel = muxChannel;
         _logger = logger;
         _flushBuffer[0] = CtrlData;
+    }
+
+    // No-op scope for when there's no multiplexer (a single OLED wired straight to the bus).
+    private IDisposable Selected() => _mux is null ? NullScope.Instance : _mux.Select(_muxChannel);
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+        public void Dispose() { }
     }
 
     public int DisplayIndex { get; }
@@ -65,16 +80,21 @@ public sealed class OledDisplay : IDisplayDriver
         try
         {
             _i2c = I2cDevice.Create(new I2cConnectionSettings(_busId, _address));
-            Command(InitSequence);
-            Array.Clear(_frame);
-            Flush();
+            using (Selected())
+            {
+                Command(InitSequence);
+                Array.Clear(_frame);
+                Flush();
+            }
             IsConnected = true;
-            _logger.LogInformation("OLED {Index} ready on i2c-{Bus} @ 0x{Addr:X2}", DisplayIndex, _busId, _address);
+            _logger.LogInformation("OLED {Index} ready on i2c-{Bus} @ 0x{Addr:X2}{Mux}", DisplayIndex, _busId,
+                _address, _mux is null ? "" : $" (mux channel {_muxChannel})");
         }
         catch (Exception ex)
         {
             IsConnected = false;
-            _logger.LogError(ex, "OLED {Index} init failed on i2c-{Bus} @ 0x{Addr:X2}", DisplayIndex, _busId, _address);
+            _logger.LogError(ex, "OLED {Index} init failed on i2c-{Bus} @ 0x{Addr:X2}{Mux}", DisplayIndex, _busId,
+                _address, _mux is null ? "" : $" (mux channel {_muxChannel})");
         }
         return Task.CompletedTask;
     }
@@ -84,7 +104,7 @@ public sealed class OledDisplay : IDisplayDriver
         lock (_gate)
         {
             Array.Clear(_frame);
-            Flush();
+            using (Selected()) Flush();
         }
         return Task.CompletedTask;
     }
@@ -94,7 +114,7 @@ public sealed class OledDisplay : IDisplayDriver
         lock (_gate)
         {
             DrawRow(row, text);
-            Flush();
+            using (Selected()) Flush();
         }
         return Task.CompletedTask;
     }
@@ -111,7 +131,7 @@ public sealed class OledDisplay : IDisplayDriver
                     break;
                 DrawRow(row++, line);
             }
-            Flush();
+            using (Selected()) Flush();
         }
         return Task.CompletedTask;
     }
@@ -171,7 +191,8 @@ public sealed class OledDisplay : IDisplayDriver
         {
             if (_i2c is not null)
             {
-                Command(stackalloc byte[] { 0xAE });   // display off
+                using (Selected())
+                    Command(stackalloc byte[] { 0xAE });   // display off
                 _i2c.Dispose();
             }
         }
