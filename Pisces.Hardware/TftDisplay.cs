@@ -59,6 +59,7 @@ public sealed class TftDisplay : IDisplayDriver
     public int Width { get; }
     public int Height { get; }
     public bool IsConnected { get; private set; }
+    public bool SupportsRichScreen => true;
 
     public Task InitialiseAsync(CancellationToken ct = default)
     {

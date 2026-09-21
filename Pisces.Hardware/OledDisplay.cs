@@ -136,15 +136,68 @@ public sealed class OledDisplay : IDisplayDriver
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Richer layout than <see cref="WriteLinesAsync"/>: the title in small text, then
+    /// one row per <see cref="DisplayRow"/> — the active row gets its value scaled up
+    /// (2x) plus a value bar, since that's the one worth being able to read at a
+    /// glance; inactive rows stay compact, one line each.
+    /// </summary>
     public Task RenderScreenAsync(DisplayScreen screen, CancellationToken ct = default)
     {
-        var lines = new List<string> { screen.Title };
-        if (!string.IsNullOrEmpty(screen.Subtitle))
-            lines.Add(screen.Subtitle);
-        foreach (var r in screen.Rows)
-            lines.Add($"{r.Label} {r.Value}".TrimEnd());
-        return WriteLinesAsync(lines, ct);
+        lock (_gate)
+        {
+            Array.Clear(_frame);
+            var y = 0;
+
+            if (!string.IsNullOrEmpty(screen.Title) && FitsRow(y, 1))
+            {
+                DrawText(0, y, screen.Title, 1);
+                y += RowHeight(1) + 1;
+            }
+            if (!string.IsNullOrEmpty(screen.Subtitle) && FitsRow(y, 1))
+            {
+                DrawText(0, y, screen.Subtitle, 1);
+                y += RowHeight(1) + 1;
+            }
+
+            foreach (var row in screen.Rows)
+            {
+                if (row.IsActive)
+                {
+                    if (!FitsRow(y, 1))
+                        break;
+                    DrawText(0, y, row.Label, 1);
+                    y += RowHeight(1) + 1;
+
+                    if (!FitsRow(y, 2))
+                        break;
+                    DrawText(0, y, row.Value, 2);
+                    y += RowHeight(2) + 1;
+
+                    if (y + 3 <= Height)
+                    {
+                        var barWidth = (int)Math.Round(Cols * Math.Clamp(row.NormalisedValue, 0, 1));
+                        FillRect(0, y, Cols, 3, false);
+                        FillRect(0, y, barWidth, 3, true);
+                        y += 5;
+                    }
+                }
+                else
+                {
+                    if (!FitsRow(y, 1))
+                        break;
+                    DrawText(0, y, $"{row.Label}: {row.Value}", 1);
+                    y += RowHeight(1) + 1;
+                }
+            }
+
+            using (Selected()) Flush();
+        }
+        return Task.CompletedTask;
     }
+
+    private static int RowHeight(int scale) => 8 * scale;
+    private bool FitsRow(int y, int scale) => y + RowHeight(scale) <= Height;
 
     private void DrawRow(int row, string text)
     {
@@ -164,6 +217,52 @@ public sealed class OledDisplay : IDisplayDriver
             for (var i = 0; i < Font5x8.GlyphWidth; i++)
                 _frame[pageStart + col + i] = glyph[i];
             col += Font5x8.CellWidth;
+        }
+    }
+
+    // ---- scaled pixel drawing, for RenderScreenAsync's bigger text/bars -----------
+
+    private void SetPixel(int x, int y, bool on)
+    {
+        if ((uint)x >= (uint)Cols || (uint)y >= (uint)Height)
+            return;
+        var idx = y / 8 * Cols + x;
+        if (on) _frame[idx] |= (byte)(1 << (y % 8));
+        else _frame[idx] &= (byte)~(1 << (y % 8));
+    }
+
+    private void FillRect(int x, int y, int w, int h, bool on)
+    {
+        for (var yy = y; yy < y + h; yy++)
+            for (var xx = x; xx < x + w; xx++)
+                SetPixel(xx, yy, on);
+    }
+
+    private void DrawChar(int x, int y, char c, int scale)
+    {
+        var glyph = Font5x8.Glyph(c);
+        for (var col = 0; col < Font5x8.GlyphWidth; col++)
+        {
+            var bits = glyph[col];
+            for (var row = 0; row < 8; row++)
+            {
+                var on = (bits & (1 << row)) != 0;
+                for (var sy = 0; sy < scale; sy++)
+                    for (var sx = 0; sx < scale; sx++)
+                        SetPixel(x + col * scale + sx, y + row * scale + sy, on);
+            }
+        }
+    }
+
+    private void DrawText(int x, int y, string text, int scale)
+    {
+        var cx = x;
+        foreach (var ch in text)
+        {
+            if (cx + Font5x8.GlyphWidth * scale > Cols)
+                break;
+            DrawChar(cx, y, ch, scale);
+            cx += Font5x8.CellWidth * scale;
         }
     }
 

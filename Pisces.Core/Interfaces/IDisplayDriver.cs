@@ -11,6 +11,15 @@ public interface IDisplayDriver : IAsyncDisposable
     int Height { get; }
     bool IsConnected { get; }
 
+    /// <summary>
+    /// True for displays that can render the full <see cref="RenderScreenAsync"/>
+    /// layout (e.g. a colour TFT); false for simple text displays that should only
+    /// ever receive <see cref="WriteLinesAsync"/>. Lets callers outside
+    /// Pisces.Hardware route content per-display without depending on concrete
+    /// driver types.
+    /// </summary>
+    bool SupportsRichScreen => false;
+
     Task InitialiseAsync(CancellationToken ct = default);
 
     /// <summary>

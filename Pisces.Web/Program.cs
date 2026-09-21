@@ -65,7 +65,10 @@ else if (useHwControls)
 }
 
 if (useSimControls || useHwControls)
+{
     builder.Services.AddHostedService<ControlDaemonService>();
+    builder.Services.AddHostedService<ModuleSelectionService>();
+}
 
 if (piscesConfig.UseHardwareDisplays)
 {
