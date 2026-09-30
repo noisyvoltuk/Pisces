@@ -44,7 +44,7 @@ public sealed class OledDisplay : IDisplayDriver
     private readonly int _muxChannel;
     private readonly ILogger<OledDisplay> _logger;
     private readonly byte[] _frame = new byte[Cols * Pages];
-    private readonly byte[] _flushBuffer = new byte[1 + Cols * Pages];
+    private readonly byte[] _pageBuffer = new byte[1 + Cols];   // one page per I2C write, see Flush()
     private readonly object _gate = new();
 
     private I2cDevice? _i2c;
@@ -58,7 +58,7 @@ public sealed class OledDisplay : IDisplayDriver
         _mux = mux;
         _muxChannel = muxChannel;
         _logger = logger;
-        _flushBuffer[0] = CtrlData;
+        _pageBuffer[0] = CtrlData;
     }
 
     // No-op scope for when there's no multiplexer (a single OLED wired straight to the bus).
@@ -164,10 +164,12 @@ public sealed class OledDisplay : IDisplayDriver
             {
                 if (row.IsActive)
                 {
-                    if (!FitsRow(y, 1))
+                    // the row actually being turned gets its name at the same size as
+                    // its value — the one place on the OLED worth spending the pixels.
+                    if (!FitsRow(y, 2))
                         break;
-                    DrawText(0, y, row.Label, 1);
-                    y += RowHeight(1) + 1;
+                    DrawText(0, y, row.Label, 2);
+                    y += RowHeight(2) + 1;
 
                     if (!FitsRow(y, 2))
                         break;
@@ -280,8 +282,33 @@ public sealed class OledDisplay : IDisplayDriver
             return;
         // horizontal addressing: full screen, pointer auto-wraps
         Command(stackalloc byte[] { 0x21, 0x00, Cols - 1, 0x22, 0x00, Pages - 1 });
-        _frame.CopyTo(_flushBuffer, 1);
-        _i2c.Write(_flushBuffer);
+
+        // One page (128 bytes) per I2C write rather than the whole 1024-byte frame in
+        // a single transaction. A shared bus with a multiplexer and several OLEDs on
+        // it can be marginal enough that short writes (the init command) go through
+        // fine but one long write doesn't — chunking avoids relying on that margin,
+        // and a couple of retries rides out an occasional transient glitch either way.
+        for (var page = 0; page < Pages; page++)
+        {
+            _frame.AsSpan(page * Cols, Cols).CopyTo(_pageBuffer.AsSpan(1));
+            WriteWithRetry(_pageBuffer);
+        }
+    }
+
+    private void WriteWithRetry(ReadOnlySpan<byte> buffer)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                _i2c!.Write(buffer);
+                return;
+            }
+            catch (IOException) when (attempt < 3)
+            {
+                Thread.Sleep(1);
+            }
+        }
     }
 
     public ValueTask DisposeAsync()
