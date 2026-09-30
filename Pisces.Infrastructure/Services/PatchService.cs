@@ -12,7 +12,8 @@ namespace Pisces.Infrastructure.Services;
 /// Application service for patches and runtime module selection. Loading a patch
 /// (or switching a module) republishes the same events the control daemon would,
 /// so the engine, state and SignalR all update through their normal paths.
-/// Hosted so it can react to the patch up / down buttons.
+/// Hosted so it can react to the SAVE button and to LoadPatchRequestedEvent (the
+/// LOAD button's patch browser, see PatchBrowserService).
 /// </summary>
 public sealed class PatchService : IHostedService
 {
@@ -24,6 +25,7 @@ public sealed class PatchService : IHostedService
     private readonly ILogger<PatchService> _logger;
 
     private IDisposable? _buttonSubscription;
+    private IDisposable? _loadRequestSubscription;
 
     public PatchService(
         IPatchRepository patches,
@@ -44,12 +46,14 @@ public sealed class PatchService : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _buttonSubscription = _bus.Subscribe<ButtonPressedEvent>(OnButtonPressed);
+        _loadRequestSubscription = _bus.Subscribe<LoadPatchRequestedEvent>((e, ct) => LoadAsync(e.PatchId, ct));
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _buttonSubscription?.Dispose();
+        _loadRequestSubscription?.Dispose();
         return Task.CompletedTask;
     }
 
@@ -94,8 +98,9 @@ public sealed class PatchService : IHostedService
 
     /// <summary>
     /// Snapshot the live state into a patch and store it. Pass <paramref name="existingId"/>
-    /// to overwrite an existing patch (keeping its id and creation time); otherwise a new
-    /// patch is created and made active.
+    /// to overwrite an existing patch (keeping its id, creation time, and published status);
+    /// otherwise a new patch is created — always as <see cref="PatchStatus.Draft"/>, published
+    /// only as a deliberate step from the web UI — and made active.
     /// </summary>
     public async Task<Patch> SaveCurrentAsync(string name, string? description, string? existingId = null,
         CancellationToken ct = default)
@@ -109,6 +114,7 @@ public sealed class PatchService : IHostedService
             CreatedAt = existing?.CreatedAt ?? DateTimeOffset.UtcNow,
             Name = string.IsNullOrWhiteSpace(name) ? "Untitled" : name.Trim(),
             Description = description?.Trim() ?? string.Empty,
+            Status = existing?.Status ?? PatchStatus.Draft,
             ActiveModules = new Dictionary<string, string>(s.ActiveModules),
             ParameterValues = new Dictionary<string, double>(s.ParameterValues),
             ToggleStates = new Dictionary<string, bool>(s.ToggleStates)
@@ -121,6 +127,39 @@ public sealed class PatchService : IHostedService
     }
 
     public Task DeleteAsync(string patchId, CancellationToken ct = default) => _patches.DeleteAsync(patchId, ct);
+
+    /// <summary>Edit a stored patch's name/description without touching its saved settings.</summary>
+    public async Task<Patch?> RenameAsync(string patchId, string name, string? description, CancellationToken ct = default)
+    {
+        var patch = await _patches.GetByIdAsync(patchId, ct);
+        if (patch is null)
+        {
+            _logger.LogWarning("Patch {Id} not found", patchId);
+            return null;
+        }
+
+        patch.Name = string.IsNullOrWhiteSpace(name) ? patch.Name : name.Trim();
+        patch.Description = description?.Trim() ?? patch.Description;
+        await _patches.SaveAsync(patch, ct);
+        return patch;
+    }
+
+    /// <summary>Publish or unpublish a stored patch — only published patches appear in the
+    /// panel's LOAD browser.</summary>
+    public async Task<Patch?> SetPublishedAsync(string patchId, bool published, CancellationToken ct = default)
+    {
+        var patch = await _patches.GetByIdAsync(patchId, ct);
+        if (patch is null)
+        {
+            _logger.LogWarning("Patch {Id} not found", patchId);
+            return null;
+        }
+
+        patch.Status = published ? PatchStatus.Published : PatchStatus.Draft;
+        await _patches.SaveAsync(patch, ct);
+        _logger.LogInformation("Patch {Name} ({Id}) is now {Status}", patch.Name, patch.Id, patch.Status);
+        return patch;
+    }
 
     /// <summary>Set one channel value on the live synth (from the web workbench).</summary>
     public async Task SetParameterAsync(string channel, double value, double normalised, CancellationToken ct = default)
@@ -165,22 +204,13 @@ public sealed class PatchService : IHostedService
 
     private async Task OnButtonPressed(ButtonPressedEvent e, CancellationToken ct)
     {
-        var step = e.Action switch
-        {
-            "patch_next" => 1,
-            "patch_prev" => -1,
-            _ => 0
-        };
-        if (step == 0)
+        if (e.Action != "save_patch")
             return;
 
-        var all = await _patches.GetAllAsync(ct);
-        if (all.Count == 0)
-            return;
-
-        var current = all.ToList().FindIndex(p => p.Id == _state.Current.ActivePatchId);
-        var next = current < 0 ? 0 : (current + step + all.Count) % all.Count;
-        await LoadAsync(all[next].Id, ct);
+        // No way to type a name from the panel — snapshot as a new patch named by
+        // timestamp, to be renamed (or deleted) from the web UI if it's worth keeping.
+        var name = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        await SaveCurrentAsync(name, "Saved from the panel", existingId: null, ct);
     }
 
     private async Task<Dictionary<string, ParameterSlot>> ChannelSlotsAsync(CancellationToken ct)

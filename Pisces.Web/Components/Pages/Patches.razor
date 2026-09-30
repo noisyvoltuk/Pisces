@@ -118,16 +118,26 @@
         else
         {
             <table class="table table-sm mb-0 align-middle">
-                <thead><tr><th>Name</th><th>Modules</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
+                <thead><tr><th>Name</th><th>Status</th><th>Modules</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
                 <tbody>
                 @foreach (var p in _patches)
                 {
                     var patch = p;
                     <tr class="@(patch.Id == State.Current.ActivePatchId ? "table-active" : "")">
+                        <td style="min-width: 14rem">
+                            <input class="form-control form-control-sm mb-1" value="@patch.Name"
+                                   @onchange="e => Rename(patch, e.Value?.ToString(), patch.Description)" />
+                            @if (patch.Id == State.Current.ActivePatchId) { <span class="badge bg-primary me-1">active</span> }
+                            <input class="form-control form-control-sm text-muted" value="@patch.Description"
+                                   placeholder="description"
+                                   @onchange="e => Rename(patch, patch.Name, e.Value?.ToString())" />
+                        </td>
                         <td>
-                            <strong>@patch.Name</strong>
-                            @if (patch.Id == State.Current.ActivePatchId) { <span class="badge bg-primary ms-1">active</span> }
-                            @if (!string.IsNullOrWhiteSpace(patch.Description)) { <div class="text-muted small">@patch.Description</div> }
+                            <button class="btn btn-sm @(patch.Status == PatchStatus.Published ? "btn-success" : "btn-outline-secondary")"
+                                    title="Only published patches show up in the panel's LOAD browser"
+                                    @onclick="() => TogglePublish(patch)">
+                                @patch.Status
+                            </button>
                         </td>
                         <td class="small">@string.Join(", ", patch.ActiveModules.Select(m => $"{m.Key}={m.Value}"))</td>
                         <td class="small text-muted">@patch.UpdatedAt.LocalDateTime.ToString("g")</td>
@@ -221,6 +231,23 @@
     {
         await PatchSvc.DeleteAsync(id);
         _status = "Patch deleted.";
+        await ReloadLibrary();
+    }
+
+    private async Task Rename(Patch patch, string? name, string? description)
+    {
+        if (string.IsNullOrWhiteSpace(name) || (name == patch.Name && description == patch.Description))
+            return;
+        await PatchSvc.RenameAsync(patch.Id, name, description);
+        _status = $"Renamed to “{name}”.";
+        await ReloadLibrary();
+    }
+
+    private async Task TogglePublish(Patch patch)
+    {
+        var publish = patch.Status != PatchStatus.Published;
+        await PatchSvc.SetPublishedAsync(patch.Id, publish);
+        _status = publish ? $"Published “{patch.Name}”." : $"Unpublished “{patch.Name}”.";
         await ReloadLibrary();
     }
 

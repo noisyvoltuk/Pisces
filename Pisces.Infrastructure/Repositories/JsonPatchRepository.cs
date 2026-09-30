@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Pisces.Core.Interfaces;
@@ -15,7 +16,8 @@ public sealed class JsonPatchRepository : IPatchRepository
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
-        WriteIndented = true
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },   // Status reads as "Draft"/"Published" in the file
     };
 
     private readonly string _dir;

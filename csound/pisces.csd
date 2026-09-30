@@ -11,10 +11,15 @@
 ;    - full OSC handshake (param / toggle / module / ping-pong / patch bracket)
 ;    - one VCO (saw + square blend + sub), Moog ladder VCF, filter + amp ADSRs
 ;    - two LFOs (rate / depth / shape) summed into pitch and cutoff
-;    - reverb + delay send, filter bypass toggle
+;    - reverb + delay send
 ;  What's stubbed (commented TODO):
 ;    - vco_lfo_fade / vcf_lfo_retrig  (need a note-on gate)
 ;    - vco_saw module is the only VCO/VCF/FX variant; /pisces/module is logged only
+;
+;  No hardware toggle switches currently exist (both were removed — filter bypass
+;  didn't earn its panel space, the second was never assigned). The generic
+;  /pisces/toggle OSC listener is gone with them; if a toggle-controlled parameter
+;  is wanted again, re-add both the HardwareConfig.Toggles entry and that listener.
 ; =============================================================================
 
 <CsOptions>
@@ -93,8 +98,6 @@ instr 99
   chnset 0.6,   "fx_reverb_size"
   chnset 300,   "fx_delay_time"
   chnset 0.15,  "fx_delay_mix"
-
-  chnset 0,     "vcf_bypass"
 endin
 
 ; ==================================================== instr 1: OSC control ===
@@ -111,17 +114,6 @@ instr 1
     km1 OSClisten gi_osc, "/pisces/param", "sf", Sp, kpv
     if km1 == 1 then
       chnset kpv, Sp
-    endif
-  od
-
-  ; --- /pisces/toggle  (name, 0|1) ---
-  St    init "vcf_bypass"
-  ktv   init 0
-  km2 = 1
-  while km2 == 1 do
-    km2 OSClisten gi_osc, "/pisces/toggle", "si", St, ktv
-    if km2 == 1 then
-      chnset ktv, St
     endif
   od
 
@@ -214,10 +206,7 @@ instr 2
   kcf    limit cpsoct(koct), 20, 20000
   kres   chnget "vcf_resonance"
 
-  afilt  moogladder avco, kcf, kres
-  kbyp   chnget "vcf_bypass"
-  kwet   = (kbyp > 0.5 ? 0 : 1)                 ; a-rate ?: isn't portable — blend instead
-  avcf   = afilt * kwet + avco * (1 - kwet)
+  avcf   moogladder avco, kcf, kres
 
   ; ---- amp envelope + VCA ----
   iaatt  chnget "amp_att"

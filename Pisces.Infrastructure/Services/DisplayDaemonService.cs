@@ -20,6 +20,8 @@ namespace Pisces.Infrastructure.Services;
 /// Displays that report <see cref="IDisplayDriver.SupportsRichScreen"/> (the TFT) get
 /// the fuller module-selector layout instead: every role, the active module in each,
 /// the selected one highlighted, via <see cref="IDisplayDriver.RenderScreenAsync"/>.
+/// While <see cref="PatchBrowserService"/> has patch-browse mode active (LOAD button),
+/// the TFT swaps to the published-patch list instead — the OLEDs are unaffected.
 ///
 /// Registered only when Pisces:UseHardwareDisplays is true.
 /// </summary>
@@ -47,6 +49,12 @@ public sealed class DisplayDaemonService : BackgroundService
     private double _normalised;
     private long _lastSimpleDrawTicks;
     private long _lastRichDrawTicks;
+
+    // Patch browse mode (LOAD button + selector encoder) takes over the TFT only —
+    // the OLEDs keep showing their normal param content throughout.
+    private bool _browsingPatches;
+    private IReadOnlyList<(string Id, string Name)> _browsePatches = [];
+    private int _browseIndex;
 
     public DisplayDaemonService(IEnumerable<IDisplayDriver> displays, IEventBus bus, ISynthStateService state,
         IModuleMap moduleMap, IOptions<HardwareConfig> hardware, ILogger<DisplayDaemonService> logger)
@@ -89,6 +97,25 @@ public sealed class DisplayDaemonService : BackgroundService
         // Covers state changes the two events above don't (e.g. the initial module-map
         // seed on startup, or a patch load) so the panels never sit showing stale data.
         _state.StateChanged += OnStateChanged;
+
+        _subscriptions.Add(_bus.Subscribe<PatchBrowseStartedEvent>((e, _) =>
+        {
+            _browsingPatches = true;
+            _browsePatches = e.Patches;
+            _browseIndex = e.Index;
+            return ShowRichAsync();
+        }));
+        _subscriptions.Add(_bus.Subscribe<PatchBrowseChangedEvent>((e, _) =>
+        {
+            _browseIndex = e.Index;
+            return ShowRichAsync();
+        }));
+        _subscriptions.Add(_bus.Subscribe<PatchBrowseEndedEvent>((_, _) =>
+        {
+            _browsingPatches = false;
+            _browsePatches = [];
+            return ShowRichAsync();
+        }));
 
         try
         {
@@ -229,7 +256,7 @@ public sealed class DisplayDaemonService : BackgroundService
             return;
         _lastRichDrawTicks = now;
 
-        var screen = BuildModuleSelectorScreen();
+        var screen = _browsingPatches ? BuildPatchBrowseScreen() : BuildModuleSelectorScreen();
         try
         {
             foreach (var display in _richDisplays)
@@ -239,6 +266,29 @@ public sealed class DisplayDaemonService : BackgroundService
         {
             _logger.LogDebug(ex, "rich display render failed");
         }
+    }
+
+    // Only ~6 rows fit the TFT at once at the module-selector's row scale — scroll a
+    // window around the highlighted patch rather than truncating the list.
+    private const int MaxVisiblePatchRows = 6;
+
+    private DisplayScreen BuildPatchBrowseScreen()
+    {
+        var count = _browsePatches.Count;
+        var windowStart = count <= MaxVisiblePatchRows
+            ? 0
+            : Math.Clamp(_browseIndex - MaxVisiblePatchRows / 2, 0, count - MaxVisiblePatchRows);
+
+        var rows = _browsePatches.Skip(windowStart).Take(MaxVisiblePatchRows)
+            .Select((p, i) => new DisplayRow { Label = p.Name, IsActive = windowStart + i == _browseIndex })
+            .ToList();
+
+        return new DisplayScreen
+        {
+            Title = "Load patch",
+            Subtitle = count > 0 ? $"{_browseIndex + 1}/{count} — press to load" : "no published patches",
+            Rows = rows,
+        };
     }
 
     private DisplayScreen BuildModuleSelectorScreen()

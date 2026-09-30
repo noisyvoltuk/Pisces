@@ -42,7 +42,7 @@ public record ToggleChangedEvent(
 public record PatchSwitchingEvent(bool IsSwitching, DateTimeOffset Timestamp);
 
 /// <summary>
-/// Fired when a momentary button is pressed (e.g. patch up / patch down).
+/// Fired when a momentary button is pressed (e.g. save_patch).
 /// Published by ControlDaemonService, consumed by the patch service.
 /// </summary>
 public record ButtonPressedEvent(string ButtonId, string Action, DateTimeOffset Timestamp);
@@ -64,3 +64,26 @@ public record CsoundStatusEvent(bool Online, DateTimeOffset Timestamp);
 /// Published by CsoundOscClient, consumed by the SignalR hub / web UI.
 /// </summary>
 public record CsoundLogEvent(string Line, DateTimeOffset Timestamp);
+
+/// <summary>
+/// The LOAD button started browsing the published-patch list. Published by
+/// PatchBrowserService, consumed by DisplayDaemonService (shows the list on the TFT)
+/// and ControlDaemonService (suppresses the selector's usual role-cycle behaviour
+/// while browsing is active).
+/// </summary>
+public record PatchBrowseStartedEvent(IReadOnlyList<(string Id, string Name)> Patches, int Index, DateTimeOffset Timestamp);
+
+/// <summary>Selector encoder rotated while browsing — moved the highlighted patch.</summary>
+public record PatchBrowseChangedEvent(int Index, DateTimeOffset Timestamp);
+
+/// <summary>
+/// Browsing ended — either the selector was pressed (loading the highlighted patch,
+/// see <see cref="LoadPatchRequestedEvent"/>) or LOAD was pressed again to cancel.
+/// </summary>
+public record PatchBrowseEndedEvent(DateTimeOffset Timestamp);
+
+/// <summary>
+/// The highlighted patch was selected while browsing. Published by PatchBrowserService,
+/// consumed by PatchService (which does the actual load).
+/// </summary>
+public record LoadPatchRequestedEvent(string PatchId, DateTimeOffset Timestamp);

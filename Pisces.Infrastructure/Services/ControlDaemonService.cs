@@ -32,6 +32,11 @@ public sealed class ControlDaemonService : BackgroundService
     private readonly ConcurrentDictionary<string, double> _normalisedByKey = new();
     private Dictionary<string, Module> _modules = new();
     private List<string> _roles = [];
+    private readonly List<IDisposable> _busSubscriptions = new();
+
+    // While the LOAD button's patch browser is active, the selector encoder means
+    // something different (scroll/select a patch, not cycle role) — see PatchBrowserService.
+    private volatile bool _browsingPatches;
 
     public ControlDaemonService(
         IControlInput input,
@@ -58,6 +63,17 @@ public sealed class ControlDaemonService : BackgroundService
         _input.ToggleChanged += OnToggleChanged;
         _input.ButtonPressed += OnButtonPressed;
 
+        _busSubscriptions.Add(_bus.Subscribe<PatchBrowseStartedEvent>((_, _) =>
+        {
+            _browsingPatches = true;
+            return Task.CompletedTask;
+        }));
+        _busSubscriptions.Add(_bus.Subscribe<PatchBrowseEndedEvent>((_, _) =>
+        {
+            _browsingPatches = false;
+            return Task.CompletedTask;
+        }));
+
         await _input.InitialiseAsync(stoppingToken);
         _logger.LogInformation("Control daemon running with roles [{Roles}]", string.Join(", ", _roles));
 
@@ -75,6 +91,8 @@ public sealed class ControlDaemonService : BackgroundService
             _input.EncoderPressed -= OnEncoderPressed;
             _input.ToggleChanged -= OnToggleChanged;
             _input.ButtonPressed -= OnButtonPressed;
+            foreach (var s in _busSubscriptions)
+                s.Dispose();
         }
     }
 
@@ -136,7 +154,8 @@ public sealed class ControlDaemonService : BackgroundService
         {
             if (string.Equals(e.EncoderId, _hw.SelectorEncoder.Id, StringComparison.OrdinalIgnoreCase))
             {
-                await CycleRoleAsync(e.Delta);
+                if (!_browsingPatches)
+                    await CycleRoleAsync(e.Delta);
                 return;
             }
 
@@ -183,7 +202,7 @@ public sealed class ControlDaemonService : BackgroundService
     {
         try
         {
-            if (string.Equals(e.ButtonId, _hw.SelectorEncoder.Id, StringComparison.OrdinalIgnoreCase))
+            if (!_browsingPatches && string.Equals(e.ButtonId, _hw.SelectorEncoder.Id, StringComparison.OrdinalIgnoreCase))
                 await _bus.PublishAsync(new SelectorPressedEvent(e.Timestamp));
         }
         catch (Exception ex)

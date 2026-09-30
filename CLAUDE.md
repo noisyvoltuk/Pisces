@@ -3,7 +3,7 @@
 ## What is Pisces?
 
 Pisces is a modular CSound synthesizer running on a Raspberry Pi 4, controlled via physical hardware
-controls (rotary encoders and toggle switches) and a Blazor Server web interface.
+controls (rotary encoders and momentary buttons) and a Blazor Server web interface.
 It is designed to be open and extensible — new CSound modules (VCOs, VCFs, effects) can be added
 without touching core code.
 
@@ -14,9 +14,13 @@ without touching core code.
 - **5 × SSD1306 OLED displays** (128x64) via I2C + TCA9548A multiplexer
 - **1 × ST7789 or ILI9341 colour TFT** (320x240) via SPI — module selector display
 - **5 × rotary encoders with push button** — 1 selector + 4 parameter encoders
-- **2 × toggle switches** — on/off parameters (filter bypass; second switch currently spare)
-- **2 × momentary buttons** — patch up/down
+- **2 × momentary buttons** — save current patch / load a published patch
 - **USB MIDI** — note input direct to CSound via -Ma flag
+
+No toggle switches — both were removed (filter bypass didn't earn its panel space; the second
+was never assigned). `HardwareConfig.Toggles` / `ToggleConfig` still exist and work end to end
+(GPIO → `ToggleChangedEvent` → OSC `/pisces/toggle`) if a toggle-controlled parameter is wanted
+again later — there's just nothing configured in it right now.
 
 ## Solution Structure
 
@@ -64,12 +68,14 @@ All defined in `SynthEvents.cs`. Use these — do not add direct service calls.
 | Event | Published by | Consumed by |
 |---|---|---|
 | `ParameterChangedEvent` | `ControlDaemonService` | `CsoundEngine`, `DisplayDaemonService`, SignalR hub |
-| `ModuleSelectedEvent` | `ControlDaemonService` | `DisplayDaemonService`, SignalR hub |
-| `PatchLoadedEvent` | Patch service | All |
+| `ModuleSelectedEvent` | `ControlDaemonService`, `PatchService` | `CsoundEngine`, `DisplayDaemonService`, SignalR hub |
+| `PatchLoadedEvent` | `PatchService` | All |
 | `ToggleChangedEvent` | `ControlDaemonService` | `CsoundEngine`, `DisplayDaemonService` |
-| `ButtonPressedEvent` | `ControlDaemonService` | Patch service |
-| `PatchSwitchingEvent` | Patch service | `DisplayDaemonService`, SignalR hub |
-| `SelectorPressedEvent` | `ControlDaemonService` | Module selection service |
+| `ButtonPressedEvent` | `ControlDaemonService` | `PatchService` |
+| `PatchSwitchingEvent` | `PatchService` | `DisplayDaemonService`, SignalR hub |
+| `SelectorPressedEvent` | `ControlDaemonService` (suppressed while browsing patches) | `ModuleSelectionService` |
+| `PatchBrowseStartedEvent` / `PatchBrowseChangedEvent` / `PatchBrowseEndedEvent` | `PatchBrowserService` | `DisplayDaemonService` (swaps the TFT to the patch list), `ControlDaemonService` (suppresses the selector's normal role-cycle job) |
+| `LoadPatchRequestedEvent` | `PatchBrowserService` | `PatchService` (calls `LoadAsync`) |
 | `CsoundStatusEvent` | `CsoundMonitorService` | SignalR hub |
 | `CsoundLogEvent` | `CsoundOscClient` (journalctl tail) | SignalR hub |
 
@@ -112,7 +118,7 @@ Transport: UDP, OSC 1.0, loopback on the Pi. Config is the `Csound` section → 
 | Address | Types | Args | Meaning |
 |---|---|---|---|
 | `/pisces/param` | `sf` | name, value | set control channel `name` to `value` in **real/scaled units** (`chnset kval, Sname`) |
-| `/pisces/toggle` | `si` | name, 0\|1 | discrete on/off channel |
+| `/pisces/toggle` | `si` | name, 0\|1 | discrete on/off channel — `.NET` side still works end to end, but the master orchestra's listener for it was removed along with the last toggle; re-add both together if this is used again |
 | `/pisces/module` | `ss` | role, moduleId | select active module for a role; orchestra dispatches to the matching UDO |
 | `/pisces/patch/begin` | `s` | patchId | start of a bulk patch load |
 | `/pisces/patch/end` | `s` | patchId | end of bulk load — orchestra may crossfade / recompute |
@@ -150,7 +156,7 @@ Standard UDO channel naming convention:
   The LFO UDO writes its output to a mod-sum channel (`mod_vco_pitch`, `mod_vcf_cutoff`) which the
   VCO / VCF sections add in — additively with the ADSRs on the same destination.
 - FX: `fx_reverb_mix`, `fx_reverb_size`, `fx_delay_time`, `fx_delay_mix`
-- Toggles: `vcf_bypass`
+- Toggles: none currently configured — see the Hardware section
 
 Signal flow: `VCO → VCF → VCA → FX → OUT`
 Both VCF and VCA have independent ADSRs.
@@ -161,12 +167,14 @@ MIDI drives notes directly — no Python or .NET in the audio path.
 ```
 [TFT — module selector]          ← SPI, top of panel, colour display
 [OLED 0]  [OLED 1]  [OLED 2]  [OLED 3]   ← I2C via TCA9548A
-param1+2  param3+4  (spare)    toggles
-[enc1][enc2]  [enc3][enc4]              [tog1]
+param1+2  param3+4  (spare)    (spare)
+[enc1][enc2]  [enc3][enc4]
+                    [patch-][patch+][save]   ← momentary buttons, bottom row
 ```
 
-Each OLED shows 2 rows — one per encoder or control it sits above.
-Active parameter (being turned) expands to show a value bar.
+Each OLED's title row shows the selected role + active module name (param1..4 mean
+something different depending on which role is selected); the row you're actively
+turning expands its value scaled up with a bar underneath, the other stays compact.
 TFT shows all module roles, currently selected role highlighted, key parameter summary.
 
 ## Display Roles
@@ -176,8 +184,31 @@ TFT shows all module roles, currently selected role highlighted, key parameter s
 | OLED | 0 | `params_1_2` | param1 label+value, param2 label+value |
 | OLED | 1 | `params_3_4` | param3 label+value, param4 label+value |
 | OLED | 2 | `spare` | unassigned — freed when the waveform selector switch was removed |
-| OLED | 3 | `toggles` | toggle 1 label+state (toggle 2 spare) |
+| OLED | 3 | `spare` | unassigned — freed when the toggles were removed; `toggles` role still works if reused |
 | TFT | — | `module_selector` | all module roles, selected role, param summary |
+
+## Patches
+
+A patch (`Pisces.Core.Models.Patch`) has a `Status`: `Draft` or `Published`. New patches — from
+either the panel's SAVE button or the web workbench's "Save as new" — always start as `Draft`;
+promoting one to `Published` is a deliberate step from the `/patches` web UI (per-row Status
+button), which is also where a patch gets renamed (`PatchService.RenameAsync`, edits name/
+description only — doesn't touch the saved modules/parameters/toggles).
+
+Two panel buttons drive this (`HardwareConfig.Buttons[].Action`):
+
+| Action | Behaviour |
+|---|---|
+| `save_patch` | Snapshots the live synth as a **new** `Draft` patch named by timestamp (no way to type a name from the panel — rename later on the web) |
+| `load_patch` | Toggles patch-browse mode — see below |
+
+**Browse mode** (`PatchBrowserService`): pressing `load_patch` loads the **published** patches
+only, and puts the selector encoder into a temporary second job — rotating scrolls the
+highlighted patch (shown on the TFT, `ControlDaemonService`/`ModuleSelectionService` both stand
+down from their usual role-cycle/module-cycle handling of that encoder while this is active, via
+`PatchBrowseStartedEvent`/`PatchBrowseEndedEvent`), and pressing it loads the highlighted one and
+exits browse mode. Pressing `load_patch` again while already browsing cancels without loading.
+The OLEDs are untouched throughout — only the TFT swaps content.
 
 ## Development on Windows
 

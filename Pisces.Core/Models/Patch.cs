@@ -1,6 +1,17 @@
 namespace Pisces.Core.Models;
 
 /// <summary>
+/// A patch's review state. New patches (from the panel's SAVE button or the web
+/// workbench) start as <see cref="Draft"/>; only <see cref="Published"/> patches show
+/// up in the panel's LOAD browser. Publishing is a deliberate step from the web UI.
+/// </summary>
+public enum PatchStatus
+{
+    Draft,
+    Published,
+}
+
+/// <summary>
 /// A named patch definition — which modules are active and their saved parameter values.
 /// Patches are persisted as JSON and rendered to .csd files by PatchRenderer.
 /// </summary>
@@ -9,6 +20,7 @@ public class Patch
     public string Id { get; init; } = Guid.NewGuid().ToString();
     public string Name { get; set; } = "New patch";
     public string Description { get; set; } = string.Empty;
+    public PatchStatus Status { get; set; } = PatchStatus.Draft;
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
