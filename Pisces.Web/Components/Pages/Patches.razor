@@ -171,7 +171,16 @@
         State.StateChanged += OnStateChanged;
     }
 
-    private void OnStateChanged(object? sender, SynthState state) => InvokeAsync(StateHasChanged);
+    // A patch saved from the panel's SAVE button becomes the active patch but isn't in
+    // this page's list yet — reload the library so it shows up (ready to rename/publish)
+    // without needing a manual refresh.
+    private void OnStateChanged(object? sender, SynthState state) => InvokeAsync(async () =>
+    {
+        var id = state.ActivePatchId;
+        if (!string.IsNullOrEmpty(id) && _patches.All(p => p.Id != id))
+            await ReloadLibrary();
+        StateHasChanged();
+    });
 
     private async Task LoadModules()
     {

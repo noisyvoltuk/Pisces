@@ -71,6 +71,9 @@ public class TftConfig
     public int GpioRst { get; init; } = 24;
     public int Width { get; init; } = 320;
     public int Height { get; init; } = 240;
+
+    /// <summary>Set true if the panel is physically mounted upside down.</summary>
+    public bool Rotate180 { get; init; } = false;
 }
 
 public class I2cConfig

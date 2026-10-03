@@ -76,6 +76,7 @@ All defined in `SynthEvents.cs`. Use these — do not add direct service calls.
 | `SelectorPressedEvent` | `ControlDaemonService` (suppressed while browsing patches) | `ModuleSelectionService` |
 | `PatchBrowseStartedEvent` / `PatchBrowseChangedEvent` / `PatchBrowseEndedEvent` | `PatchBrowserService` | `DisplayDaemonService` (swaps the TFT to the patch list), `ControlDaemonService` (suppresses the selector's normal role-cycle job) |
 | `LoadPatchRequestedEvent` | `PatchBrowserService` | `PatchService` (calls `LoadAsync`) |
+| `UserNoticeEvent` | `PatchService` (saved/updated), `PatchBrowserService` (nothing to load) | `DisplayDaemonService` (flashes it on the TFT for ~2.5s) |
 | `CsoundStatusEvent` | `CsoundMonitorService` | SignalR hub |
 | `CsoundLogEvent` | `CsoundOscClient` (journalctl tail) | SignalR hub |
 
@@ -165,27 +166,34 @@ MIDI drives notes directly — no Python or .NET in the audio path.
 ## Display Layout
 
 ```
-[TFT — module selector]          ← SPI, top of panel, colour display
-[OLED 0]  [OLED 1]  [OLED 2]  [OLED 3]   ← I2C via TCA9548A
-param1+2  param3+4  (spare)    (spare)
-[enc1][enc2]  [enc3][enc4]
-                    [patch-][patch+][save]   ← momentary buttons, bottom row
+[TFT — module selector]   (select)   ← SPI, top of panel, colour display
+[OLED 0]  [enc1]
+[OLED 1]  [enc2]
+[OLED 2]  [enc3]                     ← I2C via TCA9548A, one OLED beside each encoder
+[OLED 3]  [enc4]
+[save] [load]                        ← momentary buttons
 ```
 
-Each OLED's title row shows the selected role + active module name (param1..4 mean
-something different depending on which role is selected); the row you're actively
-turning expands its value scaled up with a bar underneath, the other stays compact.
+Each OLED mirrors the encoder beside it. Its title row shows the selected role + active
+module name (param1..4 mean something different depending on which role is selected),
+then that parameter's name and value large with a bar underneath.
 TFT shows all module roles, currently selected role highlighted, key parameter summary.
 
 ## Display Roles
 
+A `params_N` role shows param slot N; `params_N_M` shows several on one display (the row
+being turned is emphasised, the others stay compact).
+
 | Display | Index | Role | Content |
 |---|---|---|---|
-| OLED | 0 | `params_1_2` | param1 label+value, param2 label+value |
-| OLED | 1 | `params_3_4` | param3 label+value, param4 label+value |
-| OLED | 2 | `spare` | unassigned — freed when the waveform selector switch was removed |
-| OLED | 3 | `spare` | unassigned — freed when the toggles were removed; `toggles` role still works if reused |
+| OLED | 0 | `params_1` | param1 name + value + bar (enc1) |
+| OLED | 1 | `params_2` | param2 name + value + bar (enc2) |
+| OLED | 2 | `params_3` | param3 name + value + bar (enc3) |
+| OLED | 3 | `params_4` | param4 name + value + bar (enc4) |
 | TFT | — | `module_selector` | all module roles, selected role, param summary |
+
+Other OLED roles still supported: `toggles` (configured toggle states) and anything else
+(e.g. `spare`) just prints its own name.
 
 ## Patches
 
@@ -209,6 +217,12 @@ down from their usual role-cycle/module-cycle handling of that encoder while thi
 `PatchBrowseStartedEvent`/`PatchBrowseEndedEvent`), and pressing it loads the highlighted one and
 exits browse mode. Pressing `load_patch` again while already browsing cancels without loading.
 The OLEDs are untouched throughout — only the TFT swaps content.
+
+**Feedback:** SAVE flashes "Saved" with the patch name on the TFT, and LOAD with nothing
+published flashes "No patches" (rather than silently doing nothing — new patches are drafts
+until published on the web, so a fresh install has an empty LOAD list). Both go through
+`UserNoticeEvent`. A patch saved from the panel also appears on the open `/patches` page
+without a manual refresh.
 
 ## Development on Windows
 

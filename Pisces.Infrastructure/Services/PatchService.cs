@@ -123,6 +123,12 @@ public sealed class PatchService : IHostedService
         await _patches.SaveAsync(patch, ct);
         await _state.SetActivePatchAsync(patch, ct);
         _logger.LogInformation("Saved patch {Name} ({Id})", patch.Name, patch.Id);
+
+        var hint = existing is null
+            ? "Draft - publish on the web"
+            : patch.Status == PatchStatus.Published ? "Published" : "Draft";
+        await _bus.PublishAsync(new UserNoticeEvent(
+            existing is null ? "Saved" : "Updated", patch.Name, hint, DateTimeOffset.UtcNow), ct);
         return patch;
     }
 

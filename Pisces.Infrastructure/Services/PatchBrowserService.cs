@@ -83,6 +83,8 @@ public sealed class PatchBrowserService : BackgroundService
             if (_published.Count == 0)
             {
                 _logger.LogInformation("LOAD pressed — no published patches to browse");
+                await _bus.PublishAsync(new UserNoticeEvent(
+                    "No patches", "None published yet", "Publish one on the web", e.Timestamp));
                 return;
             }
 

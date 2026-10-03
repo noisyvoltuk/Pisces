@@ -39,11 +39,13 @@ public sealed class TftDisplay : IDisplayDriver
     private readonly byte[] _frame;   // RGB565, big-endian per ST7789, Width*Height*2 bytes
     private readonly object _gate = new();
 
+    private readonly bool _rotate180;
+
     private GpioController? _gpio;
     private SpiDevice? _spi;
 
     public TftDisplay(int displayIndex, int spiChannel, int dcPin, int rstPin, int width, int height,
-        ILogger<TftDisplay> logger)
+        bool rotate180, ILogger<TftDisplay> logger)
     {
         DisplayIndex = displayIndex;
         _spiChannel = spiChannel;
@@ -51,6 +53,7 @@ public sealed class TftDisplay : IDisplayDriver
         _rstPin = rstPin;
         Width = width;
         Height = height;
+        _rotate180 = rotate180;
         _logger = logger;
         _frame = new byte[Width * Height * 2];
     }
@@ -225,7 +228,15 @@ public sealed class TftDisplay : IDisplayDriver
 
     // Landscape (width >= height) sets row/column exchange + mirror; portrait is the
     // panel's native orientation. See the class remarks if colours come out swapped.
-    private byte Madctl() => (byte)(Width >= Height ? 0x60 : 0x00);
+    // Rotate180 flips both row and column order (MY|MX, 0xC0) on top of that — a
+    // 180-degree rotation regardless of which base orientation it's XORed onto.
+    private byte Madctl()
+    {
+        var m = Width >= Height ? 0x60 : 0x00;
+        if (_rotate180)
+            m ^= 0xC0;
+        return (byte)m;
+    }
 
     private void Command(params byte[] bytes)
     {

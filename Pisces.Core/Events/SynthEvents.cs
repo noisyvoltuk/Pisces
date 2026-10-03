@@ -83,6 +83,13 @@ public record PatchBrowseChangedEvent(int Index, DateTimeOffset Timestamp);
 public record PatchBrowseEndedEvent(DateTimeOffset Timestamp);
 
 /// <summary>
+/// A short message to flash at the user — a patch was saved, LOAD found nothing to
+/// browse, etc. Published by whichever service did the thing, consumed by
+/// DisplayDaemonService (shown briefly on the TFT).
+/// </summary>
+public record UserNoticeEvent(string Title, string Detail, string Hint, DateTimeOffset Timestamp);
+
+/// <summary>
 /// The highlighted patch was selected while browsing. Published by PatchBrowserService,
 /// consumed by PatchService (which does the actual load).
 /// </summary>

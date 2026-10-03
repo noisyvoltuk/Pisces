@@ -62,7 +62,8 @@ public static class HardwareServiceCollectionExtensions
 
             displays.Add(new TftDisplay(
                 TftDisplayIndex, hw.TftDisplay.SpiChannel, hw.TftDisplay.GpioDc, hw.TftDisplay.GpioRst,
-                hw.TftDisplay.Width, hw.TftDisplay.Height, loggerFactory.CreateLogger<TftDisplay>()));
+                hw.TftDisplay.Width, hw.TftDisplay.Height, hw.TftDisplay.Rotate180,
+                loggerFactory.CreateLogger<TftDisplay>()));
 
             return displays;
         });
